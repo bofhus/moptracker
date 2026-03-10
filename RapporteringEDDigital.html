@@ -1284,7 +1284,9 @@
           types: [{
             description: 'Excel-fil',
             accept: {
-              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+              'application/vnd.ms-excel.sheet.macroEnabled.12': ['.xlsm'],
+              'application/vnd.ms-excel': ['.xls']
             }
           }]
         });
@@ -1294,8 +1296,18 @@
         await storeFileHandle(handle);
       } catch (error) {
         if (error?.name === 'AbortError') return;
-        alert('Kunde inte importera filen. Kontrollera filformatet och försök igen.');
+        alert(getImportErrorMessage(error));
       }
+    }
+
+    function getImportErrorMessage(error) {
+      if (error?.message?.includes('Kunde inte ladda Excel-biblioteket')) {
+        return 'Kunde inte importera eftersom Excel-biblioteket inte kunde laddas. Kontrollera internetanslutning eller brandvägg och försök igen.';
+      }
+      if (error?.message?.includes('Workbook')) {
+        return 'Kunde inte importera filen. Kontrollera att filen är en giltig Excel-fil (.xlsx, .xlsm eller .xls) och försök igen.';
+      }
+      return `Kunde inte importera filen. ${error?.message ? `Orsak: ${error.message}` : 'Kontrollera filformatet och försök igen.'}`;
     }
 
     async function exportExcel() {
@@ -1509,13 +1521,27 @@
     async function ensureXlsxLibrary() {
       if (window.XLSX) return;
 
-      await new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
-        script.onload = resolve;
-        script.onerror = () => reject(new Error('Kunde inte ladda Excel-biblioteket'));
-        document.head.appendChild(script);
-      });
+      const sources = [
+        'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+        'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js'
+      ];
+
+      for (const src of sources) {
+        try {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = src;
+            script.onload = resolve;
+            script.onerror = () => reject(new Error('Kunde inte ladda Excel-biblioteket'));
+            document.head.appendChild(script);
+          });
+          if (window.XLSX) return;
+        } catch {
+          // Testa nästa CDN.
+        }
+      }
+
+      throw new Error('Kunde inte ladda Excel-biblioteket');
     }
 
 
