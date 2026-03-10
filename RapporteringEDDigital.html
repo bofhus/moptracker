@@ -265,6 +265,21 @@
       font-size: 0.85rem;
     }
 
+    .pagination {
+      margin-top: 12px;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .pagination-info {
+      color: var(--muted);
+      font-size: 0.88rem;
+      min-width: 120px;
+      text-align: center;
+    }
+
     .chart-list {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -461,6 +476,11 @@
               <tbody id="courseTableBody"></tbody>
             </table>
           </div>
+          <div class="pagination">
+            <button class="btn secondary" id="prevPageBtn" type="button">Föregående</button>
+            <span class="pagination-info" id="pageInfo">Sida 1 / 1</span>
+            <button class="btn secondary" id="nextPageBtn" type="button">Nästa</button>
+          </div>
 
           <div class="chart-list">
             <div class="chart-box">
@@ -526,6 +546,9 @@
     let networkLockHandle = null;
     let networkLockStream = null;
 
+    const COURSES_PER_PAGE = 20;
+    let currentPage = 1;
+
     const els = {
       check1Label: document.getElementById('check1Label'),
       check2Label: document.getElementById('check2Label'),
@@ -544,6 +567,9 @@
       resetFiltersBtn: document.getElementById('resetFiltersBtn'),
       statsGrid: document.getElementById('statsGrid'),
       courseTableBody: document.getElementById('courseTableBody'),
+      prevPageBtn: document.getElementById('prevPageBtn'),
+      nextPageBtn: document.getElementById('nextPageBtn'),
+      pageInfo: document.getElementById('pageInfo'),
       tagStats: document.getElementById('tagStats'),
       checkStats: document.getElementById('checkStats'),
       mopMatrixHead: document.getElementById('mopMatrixHead'),
@@ -582,18 +608,22 @@
       });
       els.searchInput.addEventListener('input', e => {
         filters.search = e.target.value.trim().toLowerCase();
+        currentPage = 1;
         render();
       });
       els.tagFilter.addEventListener('change', e => {
         filters.tag = e.target.value;
+        currentPage = 1;
         render();
       });
       els.checkFilter.addEventListener('change', e => {
         filters.check = e.target.value;
+        currentPage = 1;
         render();
       });
       els.sortBy.addEventListener('change', e => {
         filters.sortBy = e.target.value;
+        currentPage = 1;
         render();
       });
       els.resetFiltersBtn.addEventListener('click', () => {
@@ -605,7 +635,24 @@
         els.tagFilter.value = 'all';
         els.checkFilter.value = 'all';
         els.sortBy.value = 'created_desc';
+        currentPage = 1;
         render();
+      });
+
+      els.prevPageBtn.addEventListener('click', () => {
+        if (currentPage > 1) {
+          currentPage -= 1;
+          render();
+        }
+      });
+
+      els.nextPageBtn.addEventListener('click', () => {
+        const filteredCount = getFilteredCourses().length;
+        const totalPages = Math.max(1, Math.ceil(filteredCount / COURSES_PER_PAGE));
+        if (currentPage < totalPages) {
+          currentPage += 1;
+          render();
+        }
       });
 
       els.courseTableBody.addEventListener('change', e => {
@@ -867,6 +914,7 @@
       state.courses.unshift(...newCourses);
       markDirty();
       els.bulkCourses.value = '';
+      currentPage = 1;
       render();
     }
 
@@ -928,9 +976,17 @@
 
     function render() {
       const filtered = getFilteredCourses();
+      const totalPages = Math.max(1, Math.ceil(filtered.length / COURSES_PER_PAGE));
+      if (currentPage > totalPages) currentPage = totalPages;
+      if (currentPage < 1) currentPage = 1;
+
+      const start = (currentPage - 1) * COURSES_PER_PAGE;
+      const paged = filtered.slice(start, start + COURSES_PER_PAGE);
+
       renderFilters();
       renderStats(filtered);
-      renderTable(filtered);
+      renderTable(paged);
+      renderPagination(filtered.length, totalPages);
       renderBars(filtered);
       renderMopMatrix(filtered);
     }
@@ -1006,6 +1062,12 @@
         `;
       }).join('');
 
+    }
+
+    function renderPagination(filteredCount, totalPages) {
+      els.pageInfo.textContent = `Sida ${currentPage} / ${totalPages}`;
+      els.prevPageBtn.disabled = currentPage <= 1 || filteredCount === 0;
+      els.nextPageBtn.disabled = currentPage >= totalPages || filteredCount === 0;
     }
 
     function renderBars(filtered) {
