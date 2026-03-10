@@ -308,6 +308,22 @@
       border-radius: 999px;
     }
 
+    .ring-badge {
+      --value: 0;
+      display: inline-grid;
+      place-items: center;
+      width: 54px;
+      height: 54px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--text);
+      background:
+        radial-gradient(circle closest-side, rgba(15,23,42,0.95) 70%, transparent 72%),
+        conic-gradient(var(--accent-2) calc(var(--value) * 1%), rgba(148,163,184,0.24) 0);
+      border: 1px solid rgba(124,58,237,0.35);
+    }
+
     .inline-3 {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -482,11 +498,7 @@
             <button class="btn secondary" id="nextPageBtn" type="button">Nästa</button>
           </div>
 
-          <div class="chart-list">
-            <div class="chart-box">
-              <h2>Statistik per Avd</h2>
-              <div id="tagStats" class="bar-list"></div>
-            </div>
+          <div class="chart-list" style="grid-template-columns: minmax(0, 1fr);">
             <div class="chart-box">
               <h2>Statistik per MoP</h2>
               <div id="checkStats" class="bar-list"></div>
@@ -571,7 +583,6 @@
       prevPageBtn: document.getElementById('prevPageBtn'),
       nextPageBtn: document.getElementById('nextPageBtn'),
       pageInfo: document.getElementById('pageInfo'),
-      tagStats: document.getElementById('tagStats'),
       checkStats: document.getElementById('checkStats'),
       mopMatrixHead: document.getElementById('mopMatrixHead'),
       mopMatrixBody: document.getElementById('mopMatrixBody'),
@@ -1076,16 +1087,6 @@
 
     function renderBars(filtered) {
       const total = filtered.length || 1;
-      const tagCounts = {};
-      filtered.forEach(c => { tagCounts[c.tag] = (tagCounts[c.tag] || 0) + 1; });
-      const tagEntries = Object.entries(tagCounts)
-        .sort((a,b) => b[1] - a[1])
-        .map(([tag, count]) => [tag, (count / total) * 100]);
-
-      els.tagStats.innerHTML = filtered.length
-        ? createBars(tagEntries)
-        : '<div class="small">Ingen statistik att visa ännu.</div>';
-
       const checkEntries = state.settings.checkLabels.map((label, idx) => {
         const count = filtered.filter(c => c.checks[idx]).length;
         return [label, (count / total) * 100];
@@ -1136,8 +1137,8 @@
         return `
           <tr>
             <td><strong>${escapeHtml(avd)}</strong></td>
-            ${mopPct.map(value => `<td><span class="badge">${value.toFixed(1)} %</span></td>`).join('')}
-            <td><span class="badge">${totalMopPctPerAvd.toFixed(1)} %</span></td>
+            ${mopPct.map(value => `<td>${createRingBadge(value)}</td>`).join('')}
+            <td>${createRingBadge(totalMopPctPerAvd)}</td>
           </tr>
         `;
       });
@@ -1149,12 +1150,17 @@
       rows.push(`
         <tr>
           <td><strong>Totalt</strong></td>
-          ${totalMopPct.map(value => `<td><span class="badge">${value.toFixed(1)} %</span></td>`).join('')}
-          <td><span class="badge">${overallMopPct.toFixed(1)} %</span></td>
+          ${totalMopPct.map(value => `<td>${createRingBadge(value)}</td>`).join('')}
+          <td>${createRingBadge(overallMopPct)}</td>
         </tr>
       `);
 
       els.mopMatrixBody.innerHTML = rows.join('');
+    }
+
+    function createRingBadge(value) {
+      const safeValue = Math.max(0, Math.min(100, Number(value) || 0));
+      return `<span class="ring-badge" style="--value:${safeValue.toFixed(1)};">${safeValue.toFixed(1)}%</span>`;
     }
 
 
