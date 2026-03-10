@@ -477,6 +477,9 @@
     let state = structuredClone(defaultState);
     let saveFileHandle = null;
     let hasUnsavedChanges = false;
+    const FILE_HANDLE_DB = 'moptracker-file-handle';
+    const FILE_HANDLE_STORE = 'handles';
+    const FILE_HANDLE_KEY = 'saveFileHandle';
 
     const els = {
       check1Label: document.getElementById('check1Label'),
@@ -509,8 +512,21 @@
     };
 
     bindEvents();
-    hydrateSettings();
-    render();
+    void initApp();
+
+    async function initApp() {
+      hydrateSettings();
+      render();
+
+      saveFileHandle = await loadPersistedFileHandle();
+      if (!saveFileHandle) return;
+
+      const loaded = await loadWorkbookFromHandle(saveFileHandle);
+      if (loaded) {
+        hasUnsavedChanges = false;
+        render();
+      }
+    }
 
     function bindEvents() {
       els.saveSettingsBtn.addEventListener('click', saveCheckSettings);
@@ -918,10 +934,127 @@ Skriv ja för att bekräfta.`);
             }
           }]
         });
+        await persistFileHandle(saveFileHandle);
       } catch (error) {
         if (error?.name === 'AbortError') return;
         throw error;
       }
+    }
+
+    async function loadWorkbookFromHandle(handle) {
+      try {
+        const permission = await handle.queryPermission({ mode: 'read' });
+        if (permission !== 'granted') return false;
+
+        if (!window.XLSX) await ensureXlsxLibrary();
+        const file = await handle.getFile();
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: 'array' });
+        const loadedState = parseWorkbook(workbook);
+        if (!loadedState) return false;
+
+        state = loadedState;
+        hydrateSettings();
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    function parseWorkbook(workbook) {
+      const posterSheet = workbook.Sheets['Poster'];
+      if (!posterSheet) return null;
+
+      const rows = XLSX.utils.sheet_to_json(posterSheet, { header: 1, defval: '' });
+      if (!rows.length) return structuredClone(defaultState);
+
+      const dataRows = rows.slice(1);
+      const courses = dataRows
+        .map((row, index) => {
+          const course = String(row[0] || '').trim();
+          if (!course) return null;
+
+          const createdAtSource = row[6];
+          const createdAt = Number.isFinite(Date.parse(createdAtSource))
+            ? Date.parse(createdAtSource)
+            : Date.now() + index;
+
+          return {
+            id: crypto.randomUUID ? crypto.randomUUID() : `${createdAt}-${index}-${Math.random().toString(36).slice(2)}`,
+            course,
+            tag: String(row[1] || '').trim() || 'Utan Avd',
+            checks: [row[2], row[3], row[4]].map(value => String(value).trim().toLowerCase() === 'ja'),
+            createdAt
+          };
+        })
+        .filter(Boolean);
+
+      const settingsSheet = workbook.Sheets['Inställningar'];
+      const checkLabels = settingsSheet
+        ? parseCheckLabelsFromSettings(settingsSheet)
+        : [...defaultState.settings.checkLabels];
+
+      return {
+        settings: { checkLabels },
+        courses
+      };
+    }
+
+    function parseCheckLabelsFromSettings(settingsSheet) {
+      const rows = XLSX.utils.sheet_to_json(settingsSheet, { header: 1, defval: '' });
+      const defaultLabels = [...defaultState.settings.checkLabels];
+      const map = new Map(rows.map(row => [String(row[0] || '').trim(), String(row[1] || '').trim()]));
+
+      return [
+        map.get('MoP 1') || defaultLabels[0],
+        map.get('MoP 2') || defaultLabels[1],
+        map.get('MoP 3') || defaultLabels[2]
+      ];
+    }
+
+    async function persistFileHandle(handle) {
+      try {
+        const db = await openFileHandleDb();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction(FILE_HANDLE_STORE, 'readwrite');
+          tx.objectStore(FILE_HANDLE_STORE).put(handle, FILE_HANDLE_KEY);
+          tx.oncomplete = resolve;
+          tx.onerror = () => reject(tx.error);
+        });
+        db.close();
+      } catch {
+        // Ignore persistence failures in unsupported browsers.
+      }
+    }
+
+    async function loadPersistedFileHandle() {
+      try {
+        const db = await openFileHandleDb();
+        const handle = await new Promise((resolve, reject) => {
+          const tx = db.transaction(FILE_HANDLE_STORE, 'readonly');
+          const request = tx.objectStore(FILE_HANDLE_STORE).get(FILE_HANDLE_KEY);
+          request.onsuccess = () => resolve(request.result || null);
+          request.onerror = () => reject(request.error);
+        });
+        db.close();
+        return handle;
+      } catch {
+        return null;
+      }
+    }
+
+    async function openFileHandleDb() {
+      return await new Promise((resolve, reject) => {
+        const request = indexedDB.open(FILE_HANDLE_DB, 1);
+        request.onupgradeneeded = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains(FILE_HANDLE_STORE)) {
+            db.createObjectStore(FILE_HANDLE_STORE);
+          }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
     }
 
     function buildWorkbook() {
