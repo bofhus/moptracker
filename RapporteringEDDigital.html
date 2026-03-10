@@ -18,16 +18,17 @@
       --warn: #f59e0b;
       --shadow: 0 20px 60px rgba(0,0,0,0.35);
       --radius: 20px;
+      --page-bg:
+        radial-gradient(circle at top left, rgba(124,58,237,0.22), transparent 35%),
+        radial-gradient(circle at top right, rgba(6,182,212,0.18), transparent 30%),
+        linear-gradient(180deg, #0b1020 0%, #121a2f 100%);
     }
 
     * { box-sizing: border-box; }
     body {
       margin: 0;
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background:
-        radial-gradient(circle at top left, rgba(124,58,237,0.22), transparent 35%),
-        radial-gradient(circle at top right, rgba(6,182,212,0.18), transparent 30%),
-        linear-gradient(180deg, #0b1020 0%, #121a2f 100%);
+      background: var(--page-bg);
       color: var(--text);
       min-height: 100vh;
     }
@@ -379,6 +380,71 @@
       user-select: none;
     }
 
+
+
+    body.light-theme {
+      --bg: #f1f5f9;
+      --panel: rgba(255, 255, 255, 0.92);
+      --panel-2: rgba(241, 245, 249, 0.96);
+      --border: rgba(15, 23, 42, 0.14);
+      --text: #0f172a;
+      --muted: #475569;
+      --accent: #7c3aed;
+      --accent-2: #0891b2;
+      --shadow: 0 20px 50px rgba(15, 23, 42, 0.12);
+      --page-bg:
+        radial-gradient(circle at top left, rgba(124,58,237,0.12), transparent 35%),
+        radial-gradient(circle at top right, rgba(6,182,212,0.1), transparent 30%),
+        linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+    }
+
+    body.light-theme .hero {
+      background: linear-gradient(135deg, rgba(124,58,237,0.12), rgba(6,182,212,0.12));
+    }
+
+    body.light-theme input[type="text"],
+    body.light-theme textarea,
+    body.light-theme select {
+      background: rgba(255,255,255,0.95);
+      border-color: rgba(148,163,184,0.45);
+      color: var(--text);
+    }
+
+    body.light-theme .btn.secondary {
+      background: rgba(255,255,255,0.88);
+      border-color: rgba(148,163,184,0.45);
+    }
+
+    body.light-theme .table-wrap,
+    body.light-theme .chart-box,
+    body.light-theme .muted-box {
+      background: rgba(255,255,255,0.75);
+    }
+
+    body.light-theme th {
+      background: rgba(248,250,252,0.98);
+    }
+
+    body.light-theme .check-pill {
+      background: rgba(241,245,249,0.95);
+      border-color: rgba(148,163,184,0.45);
+    }
+
+    body.light-theme .bar-line {
+      background: rgba(148,163,184,0.35);
+    }
+
+    body.light-theme .ring-badge {
+      background:
+        radial-gradient(circle closest-side, rgba(255,255,255,0.98) 70%, transparent 72%),
+        conic-gradient(var(--accent-2) calc(var(--value) * 1%), rgba(148,163,184,0.28) 0);
+    }
+
+
+    body.light-theme .app-lock-overlay {
+      background: rgba(226,232,240,0.7);
+    }
+
     @media (max-width: 1100px) {
       .layout { grid-template-columns: 1fr; }
       .toolbar { grid-template-columns: 1fr 1fr; }
@@ -402,6 +468,7 @@
       <div class="hero-actions">
         <button class="btn secondary" id="importExcelBtn">Importera</button>
         <button class="btn success" id="exportExcelBtn">Spara</button>
+        <button class="btn ghost" id="toggleThemeBtn" type="button">Ljust tema</button>
       </div>
     </section>
 
@@ -574,6 +641,7 @@
       clearInputBtn: document.getElementById('clearInputBtn'),
       importExcelBtn: document.getElementById('importExcelBtn'),
       exportExcelBtn: document.getElementById('exportExcelBtn'),
+      toggleThemeBtn: document.getElementById('toggleThemeBtn'),
       searchInput: document.getElementById('searchInput'),
       tagFilter: document.getElementById('tagFilter'),
       checkFilter: document.getElementById('checkFilter'),
@@ -599,6 +667,7 @@
       sortBy: 'created_desc'
     };
 
+    applyStoredTheme();
     bindEvents();
     setupAppLock();
     hydrateSettings();
@@ -615,6 +684,7 @@
       });
       els.importExcelBtn.addEventListener('click', importExcel);
       els.exportExcelBtn.addEventListener('click', exportExcel);
+      els.toggleThemeBtn.addEventListener('click', toggleTheme);
       els.retryLockBtn.addEventListener('click', () => {
         tryAcquireAppLock();
         void setupNetworkLock({ manualRetry: true });
@@ -706,6 +776,25 @@
       });
     }
 
+
+
+
+    function applyStoredTheme() {
+      const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+      setTheme(savedTheme === 'dark' ? 'dark' : 'light');
+    }
+
+    function setTheme(theme) {
+      const useLightTheme = theme === 'light';
+      document.body.classList.toggle('light-theme', useLightTheme);
+      els.toggleThemeBtn.textContent = useLightTheme ? 'Mörkt tema' : 'Ljust tema';
+      localStorage.setItem(THEME_STORAGE_KEY, useLightTheme ? 'light' : 'dark');
+    }
+
+    function toggleTheme() {
+      const isLight = document.body.classList.contains('light-theme');
+      setTheme(isLight ? 'dark' : 'light');
+    }
 
     function setupAppLock() {
       tryAcquireAppLock();
