@@ -555,9 +555,6 @@
           return;
         }
 
-        if (e.target.matches('input[data-tag-id]')) {
-          updateCourseTag(e.target.dataset.tagId, e.target.value);
-        }
       });
 
       window.addEventListener('pagehide', () => {
@@ -651,14 +648,6 @@
       const course = state.courses.find(c => c.id === courseId);
       if (!course) return;
       course.checks[checkIndex] = value;
-      markDirty();
-      render();
-    }
-
-    function updateCourseTag(courseId, value) {
-      const course = state.courses.find(c => c.id === courseId);
-      if (!course) return;
-      course.tag = value.trim() || 'Utan Avd';
       markDirty();
       render();
     }
@@ -780,7 +769,7 @@
           <tr>
             <td>${escapeHtml(course.course)}</td>
             <td>
-              <input type="text" value="${escapeHtml(course.tag)}" data-tag-id="${course.id}" />
+              <span class="badge">${escapeHtml(course.tag)}</span>
             </td>
             <td><div class="check-group">${checksMarkup}</div></td>
             <td><span class="badge">${countChecks(course)} / 3 MoP</span></td>
