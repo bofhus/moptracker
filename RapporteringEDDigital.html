@@ -1092,7 +1092,6 @@
 
 
     async function importExcel() {
-      if (appLocked) return;
       if (!window.showOpenFilePicker) {
         alert('Din webbläsare saknar stöd för att importera Excel-filer via filväljaren.');
         return;
