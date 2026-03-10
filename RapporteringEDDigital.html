@@ -883,7 +883,7 @@ Skriv ja för att bekräfta.`);
 
       alert('Sparguide:
 1) Välj samma mapp som index-filen ligger i.
-2) Välj filnamnet uppfoljning-digital-infrastruktur.xlsx.
+2) Välj filnamnet DATABASREDD.xlsx.
 3) Om filen redan finns, välj att skriva över den befintliga filen.');
 
       const header = ['Post', 'Avd', state.settings.checkLabels[0], state.settings.checkLabels[1], state.settings.checkLabels[2], 'Antal bockar', 'Skapad'];
@@ -911,13 +911,13 @@ Skriv ja för att bekräfta.`);
 
       if (!window.showSaveFilePicker) {
         alert('Din webbläsare saknar filväljare med platsval. Filen laddas ner i webbläsarens standardmapp.');
-        XLSX.writeFile(workbook, 'uppfoljning-digital-infrastruktur.xlsx');
+        XLSX.writeFile(workbook, 'DATABASREDD.xlsx');
         return;
       }
 
       try {
         const handle = await window.showSaveFilePicker({
-          suggestedName: 'uppfoljning-digital-infrastruktur.xlsx',
+          suggestedName: 'DATABASREDD.xlsx',
           types: [{
             description: 'Excel-fil',
             accept: {
