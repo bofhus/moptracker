@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Uppföljning a etablering av digital infrastruktur</title>
+  <title>Uppföljning av etablering av digital infrastruktur</title>
   <style>
     :root {
       --bg: #0b1020;
@@ -311,6 +311,18 @@
       font-size: 0.9rem;
     }
 
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     @media (max-width: 1100px) {
       .layout { grid-template-columns: 1fr; }
       .toolbar { grid-template-columns: 1fr 1fr; }
@@ -329,14 +341,11 @@
   <div class="container">
     <section class="hero">
       <div>
-        <h1>Uppföljning a etablering av digital infrastruktur</h1>
+        <h1>Uppföljning av etablering av digital infrastruktur</h1>
         <p>Lägg in många poster som textsträngar, koppla dem till Avd, markera tre valfria MoP och få statistik direkt. Allt sparas lokalt i webbläsaren, eftersom människor av någon anledning gärna vill att data faktiskt ligger kvar.</p>
       </div>
       <div class="hero-actions">
-        <button class="btn success" id="exportJsonBtn">Exportera JSON</button>
-        <button class="btn secondary" id="exportCsvBtn">Exportera CSV</button>
-        <label class="btn ghost" for="importFile" style="display:inline-flex;align-items:center;">Importera data</label>
-        <input id="importFile" type="file" accept="application/json" hidden />
+        <button class="btn success" id="exportExcelBtn">Spara</button>
       </div>
     </section>
 
@@ -376,23 +385,12 @@
             </div>
             <div class="footer-note">Tips: samma Avd sätts på alla rader du lägger in samtidigt.</div>
           </div>
-
-          <div>
-            <h2>Datahantering</h2>
-            <div class="button-row">
-              <button class="btn warn" id="seedDemoBtn">Lägg in demo</button>
-              <button class="btn danger" id="clearAllBtn">Radera all data</button>
-            </div>
-            <div class="muted-box" style="margin-top:12px;">
-              All data sparas automatiskt i din webbläsare via localStorage. Export/import finns också, för ren självdestruktion är fortfarande ett märkligt arbetssätt.
-            </div>
-          </div>
         </div>
       </aside>
 
       <main class="panel">
         <div class="panel-inner">
-          <div class="stats-grid" id="statsGrid"></div>
+          <div class="stats-grid" id="statsGrid" role="status" aria-live="polite"></div>
 
           <div class="toolbar">
             <div>
@@ -426,13 +424,14 @@
 
           <div class="table-wrap">
             <table>
+              <caption class="sr-only">Poster med avdelning, markerade MoP och tillgängliga åtgärder</caption>
               <thead>
                 <tr>
-                  <th style="width: 32%;">Post</th>
-                  <th style="width: 18%;">Avd</th>
-                  <th style="width: 28%;">MoP</th>
-                  <th style="width: 12%;">Antal</th>
-                  <th style="width: 10%;">Åtgärder</th>
+                  <th scope="col" style="width: 32%;">Post</th>
+                  <th scope="col" style="width: 18%;">Avd</th>
+                  <th scope="col" style="width: 28%;">MoP</th>
+                  <th scope="col" style="width: 12%;">Antal</th>
+                  <th scope="col" style="width: 10%;">Åtgärder</th>
                 </tr>
               </thead>
               <tbody id="courseTableBody"></tbody>
@@ -468,8 +467,6 @@
   </div>
 
   <script>
-    const STORAGE_KEY = 'course-tag-app-v2';
-
     const defaultState = {
       settings: {
         checkLabels: ['MoP 1', 'MoP 2', 'MoP 3']
@@ -477,7 +474,9 @@
       courses: []
     };
 
-    let state = loadState();
+    let state = structuredClone(defaultState);
+    let saveFileHandle = null;
+    let hasUnsavedChanges = false;
 
     const els = {
       check1Label: document.getElementById('check1Label'),
@@ -488,11 +487,7 @@
       bulkTag: document.getElementById('bulkTag'),
       addCoursesBtn: document.getElementById('addCoursesBtn'),
       clearInputBtn: document.getElementById('clearInputBtn'),
-      seedDemoBtn: document.getElementById('seedDemoBtn'),
-      clearAllBtn: document.getElementById('clearAllBtn'),
-      exportJsonBtn: document.getElementById('exportJsonBtn'),
-      exportCsvBtn: document.getElementById('exportCsvBtn'),
-      importFile: document.getElementById('importFile'),
+      exportExcelBtn: document.getElementById('exportExcelBtn'),
       searchInput: document.getElementById('searchInput'),
       tagFilter: document.getElementById('tagFilter'),
       checkFilter: document.getElementById('checkFilter'),
@@ -524,11 +519,7 @@
         els.bulkCourses.value = '';
         els.bulkTag.value = '';
       });
-      els.seedDemoBtn.addEventListener('click', seedDemo);
-      els.clearAllBtn.addEventListener('click', clearAll);
-      els.exportJsonBtn.addEventListener('click', exportJson);
-      els.exportCsvBtn.addEventListener('click', exportCsv);
-      els.importFile.addEventListener('change', importJson);
+      els.exportExcelBtn.addEventListener('click', exportExcel);
       els.searchInput.addEventListener('input', e => {
         filters.search = e.target.value.trim().toLowerCase();
         render();
@@ -556,28 +547,52 @@
         els.sortBy.value = 'created_desc';
         render();
       });
+
+      els.courseTableBody.addEventListener('change', e => {
+        if (e.target.matches('input[type="checkbox"][data-course-id][data-check-index]')) {
+          const courseId = e.target.dataset.courseId;
+          const index = Number(e.target.dataset.checkIndex);
+          updateCourseCheck(courseId, index, e.target.checked);
+          return;
+        }
+
+        if (e.target.matches('input[data-tag-id]')) {
+          updateCourseTag(e.target.dataset.tagId, e.target.value);
+        }
+      });
+
+      els.courseTableBody.addEventListener('click', e => {
+        const btn = e.target.closest('button[data-delete-id]');
+        if (!btn) return;
+        deleteCourse(btn.dataset.deleteId);
+      });
+
+      window.addEventListener('pagehide', () => {
+        void autoSaveOnClose();
+      });
+
+      window.addEventListener('beforeunload', e => {
+        if (!hasUnsavedChanges) return;
+        if (saveFileHandle) {
+          void autoSaveOnClose();
+          return;
+        }
+        e.preventDefault();
+        e.returnValue = '';
+      });
     }
 
-    function loadState() {
+    function markDirty() {
+      hasUnsavedChanges = true;
+    }
+
+    async function autoSaveOnClose() {
+      if (!hasUnsavedChanges || !saveFileHandle) return;
       try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return structuredClone(defaultState);
-        const parsed = JSON.parse(raw);
-        return {
-          settings: {
-            checkLabels: Array.isArray(parsed?.settings?.checkLabels) && parsed.settings.checkLabels.length === 3
-              ? parsed.settings.checkLabels.map(v => String(v || '').trim() || 'MoP')
-              : [...defaultState.settings.checkLabels]
-          },
-          courses: Array.isArray(parsed?.courses) ? parsed.courses : []
-        };
+        await saveWorkbookToHandle(saveFileHandle, { showGuide: false, showSuccess: false });
       } catch {
-        return structuredClone(defaultState);
+        // Ignore close-save errors.
       }
-    }
-
-    function saveState() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }
 
     function hydrateSettings() {
@@ -590,7 +605,7 @@
     function saveCheckSettings() {
       state.settings.checkLabels = [els.check1Label.value, els.check2Label.value, els.check3Label.value]
         .map((v, i) => v.trim() || `MoP ${i + 1}`);
-      saveState();
+      markDirty();
       render();
     }
 
@@ -616,47 +631,18 @@
       }));
 
       state.courses.unshift(...newCourses);
-      saveState();
+      markDirty();
       els.bulkCourses.value = '';
       render();
     }
 
-    function seedDemo() {
-      const samples = [
-        ['Nätverk och drift', 'IT', [true, false, true]],
-        ['Molnplattform', 'IT', [true, true, false]],
-        ['Informationsstyrning', 'HR', [false, true, false]],
-        ['Identitetshantering', 'Säkerhet', [true, true, true]],
-        ['Förvaltningsmodell', 'Ekonomi', [false, false, true]],
-        ['Digital arbetsplats', 'Kommunikation', [true, false, false]]
-      ];
 
-      const now = Date.now();
-      state.courses = samples.map((item, index) => ({
-        id: crypto.randomUUID ? crypto.randomUUID() : `${now}-${index}`,
-        course: item[0],
-        tag: item[1],
-        checks: item[2],
-        createdAt: now + index
-      }));
-      saveState();
-      render();
-    }
-
-    function clearAll() {
-      const confirmed = confirm('Detta raderar all sparad kursdata.');
-      if (!confirmed) return;
-      state = structuredClone(defaultState);
-      hydrateSettings();
-      saveState();
-      render();
-    }
 
     function updateCourseCheck(courseId, checkIndex, value) {
       const course = state.courses.find(c => c.id === courseId);
       if (!course) return;
       course.checks[checkIndex] = value;
-      saveState();
+      markDirty();
       render();
     }
 
@@ -664,13 +650,22 @@
       const course = state.courses.find(c => c.id === courseId);
       if (!course) return;
       course.tag = value.trim() || 'Utan Avd';
-      saveState();
+      markDirty();
       render();
     }
 
     function deleteCourse(courseId) {
+      const course = state.courses.find(c => c.id === courseId);
+      if (!course) return;
+
+      const answer = prompt(`Är du helt säker på att du vill ta bort:
+${course.course}
+
+Skriv ja för att bekräfta.`);
+      if (typeof answer !== 'string' || answer.trim().toLowerCase() !== 'ja') return;
+
       state.courses = state.courses.filter(c => c.id !== courseId);
-      saveState();
+      markDirty();
       render();
     }
 
@@ -720,11 +715,12 @@
     }
 
     function render() {
+      const filtered = getFilteredCourses();
       renderFilters();
-      renderStats();
-      renderTable();
-      renderBars();
-      renderMopMatrix();
+      renderStats(filtered);
+      renderTable(filtered);
+      renderBars(filtered);
+      renderMopMatrix(filtered);
     }
 
     function renderFilters() {
@@ -748,18 +744,20 @@
       els.checkFilter.value = filters.check;
     }
 
-    function renderStats() {
-      const filtered = getFilteredCourses();
+    function renderStats(filtered) {
       const total = state.courses.length;
       const shown = filtered.length;
-      const uniqueTags = new Set(filtered.map(c => c.tag)).size;
       const withAnyCheck = filtered.filter(c => c.checks.some(Boolean)).length;
+      const allChecked = filtered.filter(c => c.checks.every(Boolean)).length;
+      const withoutChecks = filtered.filter(c => !c.checks.some(Boolean)).length;
+
+      const pct = value => total ? ((value / total) * 100).toFixed(1) : '0.0';
 
       const items = [
-        ['Totalt antal poster', total],
-        ['Visas just nu', shown],
-        ['Antal Avd i urval', uniqueTags],
-        ['Med minst en MoP', withAnyCheck]
+        ['Visas just nu', `${pct(shown)} %`],
+        ['Med minst en MoP', `${pct(withAnyCheck)} %`],
+        ['Med alla tre MoP', `${pct(allChecked)} %`],
+        ['Utan MoP', `${pct(withoutChecks)} %`]
       ];
 
       els.statsGrid.innerHTML = items.map(([label, value]) => `
@@ -770,8 +768,7 @@
       `).join('');
     }
 
-    function renderTable() {
-      const filtered = getFilteredCourses();
+    function renderTable(filtered) {
       if (!filtered.length) {
         els.courseTableBody.innerHTML = `<tr><td colspan="5"><div class="empty">Ingen post matchar filtret just nu.</div></td></tr>`;
         return;
@@ -802,39 +799,24 @@
         `;
       }).join('');
 
-      els.courseTableBody.querySelectorAll('input[type="checkbox"]').forEach(input => {
-        input.addEventListener('change', e => {
-          const courseId = e.target.dataset.courseId;
-          const index = Number(e.target.dataset.checkIndex);
-          updateCourseCheck(courseId, index, e.target.checked);
-        });
-      });
-
-      els.courseTableBody.querySelectorAll('input[data-tag-id]').forEach(input => {
-        input.addEventListener('change', e => {
-          updateCourseTag(e.target.dataset.tagId, e.target.value);
-        });
-      });
-
-      els.courseTableBody.querySelectorAll('button[data-delete-id]').forEach(btn => {
-        btn.addEventListener('click', e => deleteCourse(e.target.dataset.deleteId));
-      });
     }
 
-    function renderBars() {
-      const filtered = getFilteredCourses();
+    function renderBars(filtered) {
+      const total = filtered.length || 1;
       const tagCounts = {};
       filtered.forEach(c => { tagCounts[c.tag] = (tagCounts[c.tag] || 0) + 1; });
-      const tagEntries = Object.entries(tagCounts).sort((a,b) => b[1] - a[1]);
+      const tagEntries = Object.entries(tagCounts)
+        .sort((a,b) => b[1] - a[1])
+        .map(([tag, count]) => [tag, (count / total) * 100]);
 
-      els.tagStats.innerHTML = tagEntries.length
+      els.tagStats.innerHTML = filtered.length
         ? createBars(tagEntries)
         : '<div class="small">Ingen statistik att visa ännu.</div>';
 
-      const checkEntries = state.settings.checkLabels.map((label, idx) => [
-        label,
-        filtered.filter(c => c.checks[idx]).length
-      ]);
+      const checkEntries = state.settings.checkLabels.map((label, idx) => {
+        const count = filtered.filter(c => c.checks[idx]).length;
+        return [label, (count / total) * 100];
+      });
       els.checkStats.innerHTML = filtered.length
         ? createBars(checkEntries)
         : '<div class="small">Ingen statistik att visa ännu.</div>';
@@ -848,7 +830,7 @@
           <div class="bar-item">
             <div style="display:flex;justify-content:space-between;gap:8px;">
               <span>${escapeHtml(String(label))}</span>
-              <strong>${count}</strong>
+              <strong>${count.toFixed(1)} %</strong>
             </div>
             <div class="bar-line"><div class="bar-fill" style="width:${pct}%;"></div></div>
           </div>
@@ -856,17 +838,17 @@
       }).join('');
     }
 
-    function renderMopMatrix() {
-      const filtered = getFilteredCourses();
+    function renderMopMatrix(filtered) {
       const avdList = [...new Set(filtered.map(c => c.tag))].sort((a, b) => a.localeCompare(b, 'sv'));
       const labels = state.settings.checkLabels;
+      const total = filtered.length || 1;
 
-      els.mopMatrixHead.innerHTML = ['<th style="width:28%;">Avd</th>']
-        .concat(labels.map(label => `<th>${escapeHtml(label)}</th>`))
-        .concat(['<th>Totalt</th>'])
+      els.mopMatrixHead.innerHTML = ['<th scope="col" style="width:28%;">Avd</th>']
+        .concat(labels.map(label => `<th scope="col">${escapeHtml(label)}</th>`))
+        .concat(['<th scope="col">Totalt</th>'])
         .join('');
 
-      if (!avdList.length) {
+      if (!filtered.length) {
         els.mopMatrixBody.innerHTML = `<tr><td colspan="${labels.length + 2}"><div class="empty">Ingen statistik att visa ännu.</div></td></tr>`;
         return;
       }
@@ -874,94 +856,132 @@
       const rows = avdList.map(avd => {
         const subset = filtered.filter(c => c.tag === avd);
         const mopCounts = labels.map((_, idx) => subset.filter(c => c.checks[idx]).length);
+        const mopPct = mopCounts.map(count => (subset.length ? (count / subset.length) * 100 : 0));
+        const shareOfTotal = (subset.length / total) * 100;
         return `
           <tr>
             <td><strong>${escapeHtml(avd)}</strong></td>
-            ${mopCounts.map(count => `<td><span class="badge">${count}</span></td>`).join('')}
-            <td><span class="badge">${subset.length}</span></td>
+            ${mopPct.map(value => `<td><span class="badge">${value.toFixed(1)} %</span></td>`).join('')}
+            <td><span class="badge">${shareOfTotal.toFixed(1)} %</span></td>
           </tr>
         `;
       });
 
+      const totalMopPct = labels.map((_, idx) => (filtered.filter(c => c.checks[idx]).length / total) * 100);
+      rows.push(`
+        <tr>
+          <td><strong>Totalt</strong></td>
+          ${totalMopPct.map(value => `<td><span class="badge">${value.toFixed(1)} %</span></td>`).join('')}
+          <td><span class="badge">100.0 %</span></td>
+        </tr>
+      `);
+
       els.mopMatrixBody.innerHTML = rows.join('');
     }
 
-    function exportJson() {
-      downloadFile(JSON.stringify(state, null, 2), 'uppfoljning-digital-infrastruktur.json', 'application/json');
+
+
+
+
+    async function exportExcel() {
+      if (!window.showSaveFilePicker && !saveFileHandle) {
+        alert('Din webbläsare saknar avancerad filhantering. Välj en modern Chromium-baserad webbläsare om du vill spara i samma mapp och kunna skriva över samma fil.');
+      }
+
+      await chooseSaveFileIfNeeded({ showGuide: true });
+      if (!saveFileHandle) return;
+
+      try {
+        await saveWorkbookToHandle(saveFileHandle, { showGuide: false, showSuccess: true });
+      } catch {
+        alert('Kunde inte spara filen. Kontrollera filval och försök igen.');
+      }
     }
 
-    function exportCsv() {
-      const rows = [
-        ['Kurs', 'Avd', state.settings.checkLabels[0], state.settings.checkLabels[1], state.settings.checkLabels[2], 'Antal bockar']
-      ];
-      state.courses.forEach(c => {
-        rows.push([
-          c.course,
-          c.tag,
-          c.checks[0] ? 'Ja' : 'Nej',
-          c.checks[1] ? 'Ja' : 'Nej',
-          c.checks[2] ? 'Ja' : 'Nej',
-          String(countChecks(c))
-        ]);
+    async function chooseSaveFileIfNeeded({ showGuide } = { showGuide: false }) {
+      if (saveFileHandle || !window.showSaveFilePicker) return;
+
+      if (showGuide) {
+        alert(`Sparguide:
+1) Välj samma mapp som RapporteringEDDigital.html ligger i.
+2) Välj filnamnet DATABASREDD.xlsx.
+3) Om filen redan finns, välj att skriva över den befintliga filen.`);
+      }
+
+      try {
+        saveFileHandle = await window.showSaveFilePicker({
+          suggestedName: 'DATABASREDD.xlsx',
+          types: [{
+            description: 'Excel-fil',
+            accept: {
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
+            }
+          }]
+        });
+      } catch (error) {
+        if (error?.name === 'AbortError') return;
+        throw error;
+      }
+    }
+
+    function buildWorkbook() {
+      const header = ['Post', 'Avd', state.settings.checkLabels[0], state.settings.checkLabels[1], state.settings.checkLabels[2], 'Antal bockar', 'Skapad'];
+      const dataRows = state.courses.map(c => ([
+        c.course,
+        c.tag,
+        c.checks[0] ? 'Ja' : 'Nej',
+        c.checks[1] ? 'Ja' : 'Nej',
+        c.checks[2] ? 'Ja' : 'Nej',
+        countChecks(c),
+        new Date(c.createdAt).toISOString()
+      ]));
+
+      const worksheet = XLSX.utils.aoa_to_sheet([header, ...dataRows]);
+      const settingsSheet = XLSX.utils.aoa_to_sheet([
+        ['Inställning', 'Värde'],
+        ['MoP 1', state.settings.checkLabels[0]],
+        ['MoP 2', state.settings.checkLabels[1]],
+        ['MoP 3', state.settings.checkLabels[2]]
+      ]);
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Poster');
+      XLSX.utils.book_append_sheet(workbook, settingsSheet, 'Inställningar');
+      return workbook;
+    }
+
+    async function saveWorkbookToHandle(handle, { showGuide = false, showSuccess = false } = {}) {
+      if (!window.XLSX) await ensureXlsxLibrary();
+      if (showGuide && !saveFileHandle) {
+        await chooseSaveFileIfNeeded({ showGuide: true });
+      }
+      if (!handle) return;
+
+      const workbook = buildWorkbook();
+      const writable = await handle.createWritable({ keepExistingData: false });
+      const data = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
+      await writable.write(data);
+      await writable.close();
+      hasUnsavedChanges = false;
+
+      if (showSuccess) {
+        alert('Sparat till DATABASREDD.xlsx');
+      }
+    }
+
+    async function ensureXlsxLibrary() {
+      if (window.XLSX) return;
+
+      await new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+        script.onload = resolve;
+        script.onerror = () => reject(new Error('Kunde inte ladda Excel-biblioteket'));
+        document.head.appendChild(script);
       });
-      const csv = rows.map(row => row.map(csvEscape).join(';')).join('\n');
-      downloadFile(csv, 'uppfoljning-digital-infrastruktur.csv', 'text/csv;charset=utf-8');
     }
 
-    function importJson(event) {
-      const file = event.target.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          const parsed = JSON.parse(reader.result);
-          if (!parsed || !Array.isArray(parsed.courses) || !parsed.settings) {
-            throw new Error('Ogiltig fil');
-          }
-          state = {
-            settings: {
-              checkLabels: Array.isArray(parsed.settings.checkLabels) && parsed.settings.checkLabels.length === 3
-                ? parsed.settings.checkLabels.map((v, i) => String(v || '').trim() || `MoP ${i + 1}`)
-                : [...defaultState.settings.checkLabels]
-            },
-            courses: parsed.courses.map((c, index) => ({
-              id: String(c.id || (crypto.randomUUID ? crypto.randomUUID() : `import-${Date.now()}-${index}`)),
-              course: String(c.course || ''),
-              tag: String(c.tag || 'Utan Avd'),
-              checks: Array.isArray(c.checks) && c.checks.length === 3 ? c.checks.map(Boolean) : [false, false, false],
-              createdAt: Number(c.createdAt || Date.now() + index)
-            }))
-          };
-          saveState();
-          hydrateSettings();
-          render();
-          alert('Data importerad. Någonstans vann ordningen precis över kaoset.');
-        } catch {
-          alert('Det gick inte att läsa filen. Kontrollera att det är en export från appen.');
-        } finally {
-          event.target.value = '';
-        }
-      };
-      reader.readAsText(file, 'utf-8');
-    }
 
-    function downloadFile(content, filename, type) {
-      const blob = new Blob([content], { type });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    }
-
-    function csvEscape(value) {
-      const str = String(value ?? '');
-      if (/[";\n]/.test(str)) return '"' + str.replaceAll('"', '""') + '"';
-      return str;
-    }
 
     function escapeHtml(value) {
       return String(value)
