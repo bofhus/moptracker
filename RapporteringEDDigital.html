@@ -467,8 +467,6 @@
   </div>
 
   <script>
-    const STORAGE_KEY = 'course-tag-app-v2';
-
     const defaultState = {
       settings: {
         checkLabels: ['MoP 1', 'MoP 2', 'MoP 3']
@@ -476,7 +474,9 @@
       courses: []
     };
 
-    let state = loadState();
+    let state = structuredClone(defaultState);
+    let saveFileHandle = null;
+    let hasUnsavedChanges = false;
 
     const els = {
       check1Label: document.getElementById('check1Label'),
@@ -566,28 +566,33 @@
         if (!btn) return;
         deleteCourse(btn.dataset.deleteId);
       });
+
+      window.addEventListener('pagehide', () => {
+        void autoSaveOnClose();
+      });
+
+      window.addEventListener('beforeunload', e => {
+        if (!hasUnsavedChanges) return;
+        if (saveFileHandle) {
+          void autoSaveOnClose();
+          return;
+        }
+        e.preventDefault();
+        e.returnValue = '';
+      });
     }
 
-    function loadState() {
+    function markDirty() {
+      hasUnsavedChanges = true;
+    }
+
+    async function autoSaveOnClose() {
+      if (!hasUnsavedChanges || !saveFileHandle) return;
       try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return structuredClone(defaultState);
-        const parsed = JSON.parse(raw);
-        return {
-          settings: {
-            checkLabels: Array.isArray(parsed?.settings?.checkLabels) && parsed.settings.checkLabels.length === 3
-              ? parsed.settings.checkLabels.map(v => String(v || '').trim() || 'MoP')
-              : [...defaultState.settings.checkLabels]
-          },
-          courses: Array.isArray(parsed?.courses) ? parsed.courses : []
-        };
+        await saveWorkbookToHandle(saveFileHandle, { showGuide: false, showSuccess: false });
       } catch {
-        return structuredClone(defaultState);
+        // Ignore close-save errors.
       }
-    }
-
-    function saveState() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }
 
     function hydrateSettings() {
@@ -600,7 +605,7 @@
     function saveCheckSettings() {
       state.settings.checkLabels = [els.check1Label.value, els.check2Label.value, els.check3Label.value]
         .map((v, i) => v.trim() || `MoP ${i + 1}`);
-      saveState();
+      markDirty();
       render();
     }
 
@@ -626,7 +631,7 @@
       }));
 
       state.courses.unshift(...newCourses);
-      saveState();
+      markDirty();
       els.bulkCourses.value = '';
       render();
     }
@@ -637,7 +642,7 @@
       const course = state.courses.find(c => c.id === courseId);
       if (!course) return;
       course.checks[checkIndex] = value;
-      saveState();
+      markDirty();
       render();
     }
 
@@ -645,7 +650,7 @@
       const course = state.courses.find(c => c.id === courseId);
       if (!course) return;
       course.tag = value.trim() || 'Utan Avd';
-      saveState();
+      markDirty();
       render();
     }
 
@@ -660,7 +665,7 @@ Skriv ja för att bekräfta.`);
       if (typeof answer !== 'string' || answer.trim().toLowerCase() !== 'ja') return;
 
       state.courses = state.courses.filter(c => c.id !== courseId);
-      saveState();
+      markDirty();
       render();
     }
 
@@ -879,13 +884,47 @@ Skriv ja för att bekräfta.`);
 
 
     async function exportExcel() {
-      await ensureXlsxLibrary();
+      if (!window.showSaveFilePicker && !saveFileHandle) {
+        alert('Din webbläsare saknar avancerad filhantering. Välj en modern Chromium-baserad webbläsare om du vill spara i samma mapp och kunna skriva över samma fil.');
+      }
 
-      alert(`Sparguide:
-1) Välj samma mapp som index-filen ligger i.
+      await chooseSaveFileIfNeeded({ showGuide: true });
+      if (!saveFileHandle) return;
+
+      try {
+        await saveWorkbookToHandle(saveFileHandle, { showGuide: false, showSuccess: true });
+      } catch {
+        alert('Kunde inte spara filen. Kontrollera filval och försök igen.');
+      }
+    }
+
+    async function chooseSaveFileIfNeeded({ showGuide } = { showGuide: false }) {
+      if (saveFileHandle || !window.showSaveFilePicker) return;
+
+      if (showGuide) {
+        alert(`Sparguide:
+1) Välj samma mapp som RapporteringEDDigital.html ligger i.
 2) Välj filnamnet DATABASREDD.xlsx.
 3) Om filen redan finns, välj att skriva över den befintliga filen.`);
+      }
 
+      try {
+        saveFileHandle = await window.showSaveFilePicker({
+          suggestedName: 'DATABASREDD.xlsx',
+          types: [{
+            description: 'Excel-fil',
+            accept: {
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
+            }
+          }]
+        });
+      } catch (error) {
+        if (error?.name === 'AbortError') return;
+        throw error;
+      }
+    }
+
+    function buildWorkbook() {
       const header = ['Post', 'Avd', state.settings.checkLabels[0], state.settings.checkLabels[1], state.settings.checkLabels[2], 'Antal bockar', 'Skapad'];
       const dataRows = state.courses.map(c => ([
         c.course,
@@ -908,36 +947,27 @@ Skriv ja för att bekräfta.`);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Poster');
       XLSX.utils.book_append_sheet(workbook, settingsSheet, 'Inställningar');
-
-      if (!window.showSaveFilePicker) {
-        alert('Din webbläsare saknar filväljare med platsval. Filen laddas ner i webbläsarens standardmapp.');
-        XLSX.writeFile(workbook, 'DATABASREDD.xlsx');
-        return;
-      }
-
-      try {
-        const handle = await window.showSaveFilePicker({
-          suggestedName: 'DATABASREDD.xlsx',
-          types: [{
-            description: 'Excel-fil',
-            accept: {
-              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
-            }
-          }]
-        });
-
-        const writable = await handle.createWritable({ keepExistingData: false });
-        const data = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
-        await writable.write(data);
-        await writable.close();
-      } catch (error) {
-        if (error?.name === 'AbortError') return;
-        alert('Kunde inte spara filen. Kontrollera filval och försök igen.');
-      }
+      return workbook;
     }
 
+    async function saveWorkbookToHandle(handle, { showGuide = false, showSuccess = false } = {}) {
+      if (!window.XLSX) await ensureXlsxLibrary();
+      if (showGuide && !saveFileHandle) {
+        await chooseSaveFileIfNeeded({ showGuide: true });
+      }
+      if (!handle) return;
 
+      const workbook = buildWorkbook();
+      const writable = await handle.createWritable({ keepExistingData: false });
+      const data = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
+      await writable.write(data);
+      await writable.close();
+      hasUnsavedChanges = false;
 
+      if (showSuccess) {
+        alert('Sparat till DATABASREDD.xlsx');
+      }
+    }
 
     async function ensureXlsxLibrary() {
       if (window.XLSX) return;
