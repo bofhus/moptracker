@@ -550,6 +550,7 @@
     const APP_LOCK_HEARTBEAT_MS = 4000;
     const NETWORK_LOCK_HEARTBEAT_MS = 8000;
     const NETWORK_LOCK_HANDLE_KEY = 'networkLockFile';
+    const LAST_WORKBOOK_KEY = 'lastSavedWorkbook';
     const tabId = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
     let lockHeartbeatTimer = null;
     let networkLockTimer = null;
@@ -866,10 +867,11 @@
     }
 
     async function loadFromSavedExcelOnOpen() {
-      if (!window.showOpenFilePicker) return;
-
       const savedHandle = await getStoredFileHandle();
-      if (!savedHandle) return;
+      if (!savedHandle) {
+        await loadFromStoredWorkbookBackup();
+        return;
+      }
 
       try {
         let permission = await savedHandle.queryPermission({ mode: 'read' });
@@ -880,8 +882,20 @@
 
         await loadStateFromHandle(savedHandle);
       } catch {
-        // Ignore restore errors so app can still be used.
+        await loadFromStoredWorkbookBackup();
       }
+    }
+
+    async function loadFromStoredWorkbookBackup() {
+      const workbookData = await getStoredHandleByKey(LAST_WORKBOOK_KEY);
+      if (!workbookData) return;
+
+      if (!window.XLSX) await ensureXlsxLibrary();
+      const workbook = XLSX.read(workbookData, { type: 'array' });
+      state = parseWorkbook(workbook);
+      hasUnsavedChanges = false;
+      hydrateSettings();
+      render();
     }
 
     function hydrateSettings() {
@@ -1388,6 +1402,7 @@
       const data = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
       await writable.write(data);
       await writable.close();
+      await storeHandleByKey(data, LAST_WORKBOOK_KEY);
       hasUnsavedChanges = false;
 
       if (showSuccess) {
