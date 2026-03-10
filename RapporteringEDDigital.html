@@ -320,6 +320,34 @@
       border: 0;
     }
 
+    .app-lock-overlay {
+      position: fixed;
+      inset: 0;
+      display: none;
+      place-items: center;
+      padding: 24px;
+      background: rgba(2, 6, 23, 0.72);
+      backdrop-filter: blur(8px);
+      z-index: 9999;
+    }
+
+    .app-lock-overlay.visible { display: grid; }
+
+    .app-lock-card {
+      width: min(560px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      padding: 20px;
+    }
+
+    body.app-locked .container {
+      filter: blur(2px);
+      pointer-events: none;
+      user-select: none;
+    }
+
     @media (max-width: 1100px) {
       .layout { grid-template-columns: 1fr; }
       .toolbar { grid-template-columns: 1fr 1fr; }
@@ -462,6 +490,17 @@
     </div>
   </div>
 
+
+  <div id="appLockOverlay" class="app-lock-overlay" role="alert" aria-live="assertive">
+    <div class="app-lock-card">
+      <h2>Appen används redan</h2>
+      <p class="small" id="appLockMessage">Den här appen är låst till ett aktivt fönster/flik i taget. Stäng den andra fliken och försök igen.</p>
+      <div class="button-row" style="margin-top:12px;">
+        <button class="btn secondary" id="retryLockBtn">Försök igen</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const defaultState = {
       settings: {
@@ -473,6 +512,19 @@
     let state = structuredClone(defaultState);
     let saveFileHandle = null;
     let hasUnsavedChanges = false;
+
+    const APP_LOCK_KEY = 'moptracker-active-tab-lock';
+    const APP_LOCK_STALE_MS = 12000;
+    const APP_LOCK_HEARTBEAT_MS = 4000;
+    const NETWORK_LOCK_HEARTBEAT_MS = 8000;
+    const NETWORK_LOCK_HANDLE_KEY = 'networkLockFile';
+    const tabId = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    let lockHeartbeatTimer = null;
+    let networkLockTimer = null;
+    let appLocked = false;
+    let networkLockBlocked = false;
+    let networkLockHandle = null;
+    let networkLockStream = null;
 
     const els = {
       check1Label: document.getElementById('check1Label'),
@@ -495,7 +547,10 @@
       tagStats: document.getElementById('tagStats'),
       checkStats: document.getElementById('checkStats'),
       mopMatrixHead: document.getElementById('mopMatrixHead'),
-      mopMatrixBody: document.getElementById('mopMatrixBody')
+      mopMatrixBody: document.getElementById('mopMatrixBody'),
+      appLockOverlay: document.getElementById('appLockOverlay'),
+      retryLockBtn: document.getElementById('retryLockBtn'),
+      appLockMessage: document.getElementById('appLockMessage')
     };
 
     const filters = {
@@ -506,9 +561,11 @@
     };
 
     bindEvents();
+    setupAppLock();
     hydrateSettings();
     render();
     void loadFromSavedExcelOnOpen();
+    void setupNetworkLock();
 
     function bindEvents() {
       els.saveSettingsBtn.addEventListener('click', saveCheckSettings);
@@ -519,6 +576,10 @@
       });
       els.importExcelBtn.addEventListener('click', importExcel);
       els.exportExcelBtn.addEventListener('click', exportExcel);
+      els.retryLockBtn.addEventListener('click', () => {
+        tryAcquireAppLock();
+        void setupNetworkLock({ manualRetry: true });
+      });
       els.searchInput.addEventListener('input', e => {
         filters.search = e.target.value.trim().toLowerCase();
         render();
@@ -559,9 +620,24 @@
 
       window.addEventListener('pagehide', () => {
         void autoSaveOnClose();
+        releaseNetworkLock();
+        releaseAppLock();
+      });
+
+      window.addEventListener('storage', e => {
+        if (e.key === APP_LOCK_KEY) {
+          evaluateAppLock();
+        }
+      });
+
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          tryAcquireAppLock();
+        }
       });
 
       window.addEventListener('beforeunload', e => {
+        releaseNetworkLock();
         if (!hasUnsavedChanges) return;
         if (saveFileHandle) {
           void autoSaveOnClose();
@@ -570,6 +646,153 @@
         e.preventDefault();
         e.returnValue = '';
       });
+    }
+
+
+    function setupAppLock() {
+      tryAcquireAppLock();
+      if (lockHeartbeatTimer) clearInterval(lockHeartbeatTimer);
+      lockHeartbeatTimer = setInterval(() => {
+        if (!appLocked) writeAppLock();
+      }, APP_LOCK_HEARTBEAT_MS);
+    }
+
+    function readAppLock() {
+      try {
+        const raw = localStorage.getItem(APP_LOCK_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function isLockStale(lock) {
+      if (!lock?.ts) return true;
+      return (Date.now() - lock.ts) > APP_LOCK_STALE_MS;
+    }
+
+    function writeAppLock() {
+      const payload = { id: tabId, ts: Date.now() };
+      localStorage.setItem(APP_LOCK_KEY, JSON.stringify(payload));
+    }
+
+    function releaseAppLock() {
+      const lock = readAppLock();
+      if (lock?.id === tabId) {
+        localStorage.removeItem(APP_LOCK_KEY);
+      }
+    }
+
+    function setAppLockedUI(locked) {
+      appLocked = locked;
+      document.body.classList.toggle('app-locked', locked);
+      els.appLockOverlay.classList.toggle('visible', locked);
+    }
+
+    function setAppLockMessage(message) {
+      els.appLockMessage.textContent = message;
+    }
+
+    function evaluateAppLock() {
+      const lock = readAppLock();
+      const tabLocked = !!(lock && lock.id !== tabId && !isLockStale(lock));
+
+      if (networkLockBlocked) {
+        setAppLockMessage('Låsfilen används redan av en annan användare. Endast en användare åt gången kan ha appen öppen.');
+        setAppLockedUI(true);
+        return;
+      }
+
+      if (!tabLocked) {
+        setAppLockMessage('Den här appen är låst till ett aktivt fönster/flik i taget. Stäng den andra fliken och försök igen.');
+        setAppLockedUI(false);
+      } else {
+        setAppLockMessage('Den här appen är redan öppen i en annan flik i samma webbläsare. Stäng den fliken och försök igen.');
+        setAppLockedUI(true);
+      }
+    }
+
+    function tryAcquireAppLock() {
+      const lock = readAppLock();
+      if (!lock || lock.id === tabId || isLockStale(lock)) {
+        writeAppLock();
+      }
+      evaluateAppLock();
+      if (!appLocked) {
+        render();
+      }
+    }
+
+    async function setupNetworkLock({ manualRetry = false } = {}) {
+      if (!window.showSaveFilePicker) return;
+
+      try {
+        if (!networkLockHandle) {
+          networkLockHandle = await getStoredHandleByKey(NETWORK_LOCK_HANDLE_KEY);
+        }
+
+        if (!networkLockHandle) {
+          if (!manualRetry) {
+            networkLockBlocked = false;
+            evaluateAppLock();
+            return;
+          }
+
+          networkLockHandle = await window.showSaveFilePicker({
+            suggestedName: 'DATABASREDD.lock',
+            types: [{
+              description: 'Låsfil',
+              accept: {
+                'text/plain': ['.lock']
+              }
+            }]
+          });
+          await storeHandleByKey(networkLockHandle, NETWORK_LOCK_HANDLE_KEY);
+        }
+
+        const stream = await networkLockHandle.createWritable({ keepExistingData: false });
+        networkLockStream = stream;
+        networkLockBlocked = false;
+        await writeNetworkLockHeartbeat();
+
+        if (networkLockTimer) clearInterval(networkLockTimer);
+        networkLockTimer = setInterval(() => {
+          void writeNetworkLockHeartbeat();
+        }, NETWORK_LOCK_HEARTBEAT_MS);
+
+        evaluateAppLock();
+      } catch (error) {
+        networkLockBlocked = true;
+        if (error?.name === "AbortError") {
+          setAppLockMessage('Välj låsfilen för att använda appen. Endast en användare åt gången tillåts.');
+        } else {
+          setAppLockMessage('Låsfilen används redan av en annan användare. Endast en användare åt gången kan ha appen öppen.');
+        }
+        setAppLockedUI(true);
+      }
+    }
+
+    async function writeNetworkLockHeartbeat() {
+      if (!networkLockStream) return;
+      const payload = JSON.stringify({
+        tabId,
+        timestamp: new Date().toISOString(),
+        userAgent: navigator.userAgent
+      }, null, 2);
+      await networkLockStream.write({ type: 'truncate', size: 0 });
+      await networkLockStream.write(payload);
+    }
+
+    function releaseNetworkLock() {
+      if (networkLockTimer) {
+        clearInterval(networkLockTimer);
+        networkLockTimer = null;
+      }
+
+      if (networkLockStream) {
+        networkLockStream.close().catch(() => {});
+        networkLockStream = null;
+      }
     }
 
     function markDirty() {
@@ -592,7 +815,10 @@
       if (!savedHandle) return;
 
       try {
-        const permission = await savedHandle.queryPermission({ mode: 'read' });
+        let permission = await savedHandle.queryPermission({ mode: 'read' });
+        if (permission !== 'granted' && savedHandle.requestPermission) {
+          permission = await savedHandle.requestPermission({ mode: 'read' });
+        }
         if (permission !== 'granted') return;
 
         await loadStateFromHandle(savedHandle);
@@ -609,6 +835,7 @@
     }
 
     function saveCheckSettings() {
+      if (appLocked) return;
       state.settings.checkLabels = [els.check1Label.value, els.check2Label.value, els.check3Label.value]
         .map((v, i) => v.trim() || `MoP ${i + 1}`);
       markDirty();
@@ -616,6 +843,7 @@
     }
 
     function addCourses() {
+      if (appLocked) return;
       const lines = els.bulkCourses.value
         .split('\n')
         .map(line => line.trim())
@@ -645,6 +873,7 @@
 
 
     function updateCourseCheck(courseId, checkIndex, value) {
+      if (appLocked) return;
       const course = state.courses.find(c => c.id === courseId);
       if (!course) return;
       course.checks[checkIndex] = value;
@@ -889,6 +1118,7 @@
     }
 
     async function exportExcel() {
+      if (appLocked) return;
       if (!window.showSaveFilePicker && !saveFileHandle) {
         alert('Din webbläsare saknar avancerad filhantering. Välj en modern Chromium-baserad webbläsare om du vill spara i samma mapp och kunna skriva över samma fil.');
       }
@@ -992,7 +1222,7 @@
       };
     }
 
-    async function storeFileHandle(handle) {
+    async function storeHandleByKey(handle, key) {
       const db = await openHandleDb();
       await new Promise((resolve, reject) => {
         const tx = db.transaction('handles', 'readwrite');
@@ -1004,15 +1234,19 @@
           db.close();
           reject(tx.error);
         };
-        tx.objectStore('handles').put(handle, 'lastExcelFile');
+        tx.objectStore('handles').put(handle, key);
       });
     }
 
-    async function getStoredFileHandle() {
+    async function storeFileHandle(handle) {
+      await storeHandleByKey(handle, 'lastExcelFile');
+    }
+
+    async function getStoredHandleByKey(key) {
       const db = await openHandleDb();
       return await new Promise((resolve, reject) => {
         const tx = db.transaction('handles', 'readonly');
-        const request = tx.objectStore('handles').get('lastExcelFile');
+        const request = tx.objectStore('handles').get(key);
         request.onsuccess = () => {
           db.close();
           resolve(request.result || null);
@@ -1022,6 +1256,10 @@
           reject(request.error);
         };
       });
+    }
+
+    async function getStoredFileHandle() {
+      return getStoredHandleByKey('lastExcelFile');
     }
 
     function openHandleDb() {
