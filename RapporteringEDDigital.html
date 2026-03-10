@@ -881,10 +881,10 @@ Skriv ja för att bekräfta.`);
     async function exportExcel() {
       await ensureXlsxLibrary();
 
-      alert('Sparguide:
+      alert(`Sparguide:
 1) Välj samma mapp som index-filen ligger i.
 2) Välj filnamnet DATABASREDD.xlsx.
-3) Om filen redan finns, välj att skriva över den befintliga filen.');
+3) Om filen redan finns, välj att skriva över den befintliga filen.`);
 
       const header = ['Post', 'Avd', state.settings.checkLabels[0], state.settings.checkLabels[1], state.settings.checkLabels[2], 'Antal bockar', 'Skapad'];
       const dataRows = state.courses.map(c => ([
