@@ -1312,29 +1312,34 @@
 
     async function exportExcel() {
       if (appLocked) return;
-      if (!window.showSaveFilePicker && !saveFileHandle) {
-        alert('Din webbläsare saknar avancerad filhantering. Välj en modern Chromium-baserad webbläsare om du vill spara i samma mapp och kunna skriva över samma fil.');
-      }
-
-      await chooseSaveFileIfNeeded({ showGuide: true });
-      if (!saveFileHandle) return;
 
       try {
+        if (!window.showSaveFilePicker && !saveFileHandle) {
+          await downloadWorkbookFallback();
+          alert('Filen laddades ner som DATABASREDD.xlsx. Kontrollera mappen Hämtade filer/Nedladdningar.');
+          return;
+        }
+
+        await chooseSaveFileIfNeeded({ showGuide: true });
+        if (!saveFileHandle) return;
         await saveWorkbookToHandle(saveFileHandle, { showGuide: false, showSuccess: true });
-      } catch {
-        alert('Kunde inte spara filen. Kontrollera filval och försök igen.');
+      } catch (error) {
+        alert(getExportErrorMessage(error));
       }
+    }
+
+    function getExportErrorMessage(error) {
+      if (error?.name === 'AbortError') {
+        return 'Sparningen avbröts.';
+      }
+      if (error?.name === 'SecurityError' || error?.name === 'NotAllowedError') {
+        return 'Kunde inte öppna spara-dialogen. Klicka på Spara igen och välj fil direkt i dialogen.';
+      }
+      return `Kunde inte spara filen. ${error?.message ? `Orsak: ${error.message}` : 'Kontrollera filval och försök igen.'}`;
     }
 
     async function chooseSaveFileIfNeeded({ showGuide } = { showGuide: false }) {
       if (saveFileHandle || !window.showSaveFilePicker) return;
-
-      if (showGuide) {
-        alert(`Sparguide:
-1) Välj samma mapp som RapporteringEDDigital.html ligger i.
-2) Välj filnamnet DATABASREDD.xlsx.
-3) Om filen redan finns, välj att skriva över den befintliga filen.`);
-      }
 
       try {
         saveFileHandle = await window.showSaveFilePicker({
@@ -1347,6 +1352,10 @@
           }]
         });
         await storeFileHandle(saveFileHandle);
+
+        if (showGuide) {
+          alert('Tips: välj samma mapp som HTML-filen och filnamnet DATABASREDD.xlsx för att kunna skriva över nästa gång.');
+        }
       } catch (error) {
         if (error?.name === 'AbortError') return;
         throw error;
@@ -1516,6 +1525,27 @@
       if (showSuccess) {
         alert('Sparat till DATABASREDD.xlsx');
       }
+    }
+
+    async function downloadWorkbookFallback() {
+      if (!window.XLSX) await ensureXlsxLibrary();
+      const workbook = buildWorkbook();
+      const data = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
+      const blob = new Blob([data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'DATABASREDD.xlsx';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+
+      await storeHandleByKey(data, LAST_WORKBOOK_KEY);
+      hasUnsavedChanges = false;
     }
 
     async function ensureXlsxLibrary() {
