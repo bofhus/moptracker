@@ -1064,22 +1064,27 @@
         const subset = filtered.filter(c => c.tag === avd);
         const mopCounts = labels.map((_, idx) => subset.filter(c => c.checks[idx]).length);
         const mopPct = mopCounts.map(count => (subset.length ? (count / subset.length) * 100 : 0));
-        const shareOfTotal = (subset.length / total) * 100;
+        const totalMopPctPerAvd = subset.length
+          ? (mopCounts.reduce((sum, count) => sum + count, 0) / (subset.length * labels.length)) * 100
+          : 0;
         return `
           <tr>
             <td><strong>${escapeHtml(avd)}</strong></td>
             ${mopPct.map(value => `<td><span class="badge">${value.toFixed(1)} %</span></td>`).join('')}
-            <td><span class="badge">${shareOfTotal.toFixed(1)} %</span></td>
+            <td><span class="badge">${totalMopPctPerAvd.toFixed(1)} %</span></td>
           </tr>
         `;
       });
 
       const totalMopPct = labels.map((_, idx) => (filtered.filter(c => c.checks[idx]).length / total) * 100);
+      const overallMopPct = labels.length
+        ? (totalMopPct.reduce((sum, value) => sum + value, 0) / labels.length)
+        : 0;
       rows.push(`
         <tr>
           <td><strong>Totalt</strong></td>
           ${totalMopPct.map(value => `<td><span class="badge">${value.toFixed(1)} %</span></td>`).join('')}
-          <td><span class="badge">100.0 %</span></td>
+          <td><span class="badge">${overallMopPct.toFixed(1)} %</span></td>
         </tr>
       `);
 
