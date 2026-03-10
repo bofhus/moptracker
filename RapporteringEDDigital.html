@@ -1455,10 +1455,11 @@
     }
 
     function buildWorkbook() {
-      const header = ['Post', 'Avd', state.settings.checkLabels[0], state.settings.checkLabels[1], state.settings.checkLabels[2], 'Antal bockar', 'Skapad'];
+      const header = ['Post', 'Avd', state.settings.checkLabels[0], state.settings.checkLabels[1], state.settings.checkLabels[2], 'Antal bockar', 'Skapad']
+        .map(value => escapeExcelFormula(value));
       const dataRows = state.courses.map(c => ([
-        c.course,
-        c.tag,
+        escapeExcelFormula(c.course),
+        escapeExcelFormula(c.tag),
         c.checks[0] ? 'Ja' : 'Nej',
         c.checks[1] ? 'Ja' : 'Nej',
         c.checks[2] ? 'Ja' : 'Nej',
@@ -1469,15 +1470,20 @@
       const worksheet = XLSX.utils.aoa_to_sheet([header, ...dataRows]);
       const settingsSheet = XLSX.utils.aoa_to_sheet([
         ['Inställning', 'Värde'],
-        ['MoP 1', state.settings.checkLabels[0]],
-        ['MoP 2', state.settings.checkLabels[1]],
-        ['MoP 3', state.settings.checkLabels[2]]
+        ['MoP 1', escapeExcelFormula(state.settings.checkLabels[0])],
+        ['MoP 2', escapeExcelFormula(state.settings.checkLabels[1])],
+        ['MoP 3', escapeExcelFormula(state.settings.checkLabels[2])]
       ]);
 
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Poster');
       XLSX.utils.book_append_sheet(workbook, settingsSheet, 'Inställningar');
       return workbook;
+    }
+
+    function escapeExcelFormula(value) {
+      const text = String(value ?? '');
+      return /^[\t\r ]*[=+\-@]/.test(text) ? `'${text}` : text;
     }
 
     async function saveWorkbookToHandle(handle, { showGuide = false, showSuccess = false } = {}) {
