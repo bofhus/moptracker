@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Uppföljning av etablering av digital infrastruktur</title>
+  <title>Rapportering ED digital infrastruktur</title>
   <style>
     :root {
       --bg: #0b1020;
@@ -16,7 +16,6 @@
       --accent-2: #06b6d4;
       --success: #10b981;
       --warn: #f59e0b;
-      --danger: #ef4444;
       --shadow: 0 20px 60px rgba(0,0,0,0.35);
       --radius: 20px;
     }
@@ -146,7 +145,6 @@
     }
     .btn.success { background: linear-gradient(135deg, #059669, #10b981); }
     .btn.warn { background: linear-gradient(135deg, #d97706, #f59e0b); }
-    .btn.danger { background: linear-gradient(135deg, #dc2626, #ef4444); }
 
     .button-row { display: flex; gap: 10px; flex-wrap: wrap; }
 
@@ -254,7 +252,6 @@
     }
 
     .check-pill input { accent-color: var(--accent-2); }
-    .row-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
     .empty {
       text-align: center;
@@ -341,10 +338,10 @@
   <div class="container">
     <section class="hero">
       <div>
-        <h1>Uppföljning av etablering av digital infrastruktur</h1>
-        <p>Lägg in många poster som textsträngar, koppla dem till Avd, markera tre valfria MoP och få statistik direkt. Allt sparas lokalt i webbläsaren, eftersom människor av någon anledning gärna vill att data faktiskt ligger kvar.</p>
+        <h1>Rapportering ED digital infrastruktur</h1>
       </div>
       <div class="hero-actions">
+        <button class="btn secondary" id="importExcelBtn">Importera</button>
         <button class="btn success" id="exportExcelBtn">Spara</button>
       </div>
     </section>
@@ -431,7 +428,6 @@
                   <th scope="col" style="width: 18%;">Avd</th>
                   <th scope="col" style="width: 28%;">MoP</th>
                   <th scope="col" style="width: 12%;">Antal</th>
-                  <th scope="col" style="width: 10%;">Åtgärder</th>
                 </tr>
               </thead>
               <tbody id="courseTableBody"></tbody>
@@ -487,6 +483,7 @@
       bulkTag: document.getElementById('bulkTag'),
       addCoursesBtn: document.getElementById('addCoursesBtn'),
       clearInputBtn: document.getElementById('clearInputBtn'),
+      importExcelBtn: document.getElementById('importExcelBtn'),
       exportExcelBtn: document.getElementById('exportExcelBtn'),
       searchInput: document.getElementById('searchInput'),
       tagFilter: document.getElementById('tagFilter'),
@@ -520,6 +517,7 @@
         els.bulkCourses.value = '';
         els.bulkTag.value = '';
       });
+      els.importExcelBtn.addEventListener('click', importExcel);
       els.exportExcelBtn.addEventListener('click', exportExcel);
       els.searchInput.addEventListener('input', e => {
         filters.search = e.target.value.trim().toLowerCase();
@@ -557,15 +555,6 @@
           return;
         }
 
-        if (e.target.matches('input[data-tag-id]')) {
-          updateCourseTag(e.target.dataset.tagId, e.target.value);
-        }
-      });
-
-      els.courseTableBody.addEventListener('click', e => {
-        const btn = e.target.closest('button[data-delete-id]');
-        if (!btn) return;
-        deleteCourse(btn.dataset.deleteId);
       });
 
       window.addEventListener('pagehide', () => {
@@ -659,29 +648,6 @@
       const course = state.courses.find(c => c.id === courseId);
       if (!course) return;
       course.checks[checkIndex] = value;
-      markDirty();
-      render();
-    }
-
-    function updateCourseTag(courseId, value) {
-      const course = state.courses.find(c => c.id === courseId);
-      if (!course) return;
-      course.tag = value.trim() || 'Utan Avd';
-      markDirty();
-      render();
-    }
-
-    function deleteCourse(courseId) {
-      const course = state.courses.find(c => c.id === courseId);
-      if (!course) return;
-
-      const answer = prompt(`Är du helt säker på att du vill ta bort:
-${course.course}
-
-Skriv ja för att bekräfta.`);
-      if (typeof answer !== 'string' || answer.trim().toLowerCase() !== 'ja') return;
-
-      state.courses = state.courses.filter(c => c.id !== courseId);
       markDirty();
       render();
     }
@@ -787,7 +753,7 @@ Skriv ja för att bekräfta.`);
 
     function renderTable(filtered) {
       if (!filtered.length) {
-        els.courseTableBody.innerHTML = `<tr><td colspan="5"><div class="empty">Ingen post matchar filtret just nu.</div></td></tr>`;
+        els.courseTableBody.innerHTML = `<tr><td colspan="4"><div class="empty">Ingen post matchar filtret just nu.</div></td></tr>`;
         return;
       }
 
@@ -803,15 +769,10 @@ Skriv ja för att bekräfta.`);
           <tr>
             <td>${escapeHtml(course.course)}</td>
             <td>
-              <input type="text" value="${escapeHtml(course.tag)}" data-tag-id="${course.id}" />
+              <span class="badge">${escapeHtml(course.tag)}</span>
             </td>
             <td><div class="check-group">${checksMarkup}</div></td>
             <td><span class="badge">${countChecks(course)} / 3 MoP</span></td>
-            <td>
-              <div class="row-actions">
-                <button class="btn danger" data-delete-id="${course.id}">Ta bort</button>
-              </div>
-            </td>
           </tr>
         `;
       }).join('');
@@ -899,6 +860,33 @@ Skriv ja för att bekräfta.`);
 
 
 
+
+
+    async function importExcel() {
+      if (!window.showOpenFilePicker) {
+        alert('Din webbläsare saknar stöd för att importera Excel-filer via filväljaren.');
+        return;
+      }
+
+      try {
+        const [handle] = await window.showOpenFilePicker({
+          multiple: false,
+          types: [{
+            description: 'Excel-fil',
+            accept: {
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
+            }
+          }]
+        });
+
+        if (!handle) return;
+        await loadStateFromHandle(handle);
+        await storeFileHandle(handle);
+      } catch (error) {
+        if (error?.name === 'AbortError') return;
+        alert('Kunde inte importera filen. Kontrollera filformatet och försök igen.');
+      }
+    }
 
     async function exportExcel() {
       if (!window.showSaveFilePicker && !saveFileHandle) {
