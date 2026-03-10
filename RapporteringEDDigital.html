@@ -341,6 +341,7 @@
         <h1>Rapportering ED digital infrastruktur</h1>
       </div>
       <div class="hero-actions">
+        <button class="btn secondary" id="importExcelBtn">Importera</button>
         <button class="btn success" id="exportExcelBtn">Spara</button>
       </div>
     </section>
@@ -482,6 +483,7 @@
       bulkTag: document.getElementById('bulkTag'),
       addCoursesBtn: document.getElementById('addCoursesBtn'),
       clearInputBtn: document.getElementById('clearInputBtn'),
+      importExcelBtn: document.getElementById('importExcelBtn'),
       exportExcelBtn: document.getElementById('exportExcelBtn'),
       searchInput: document.getElementById('searchInput'),
       tagFilter: document.getElementById('tagFilter'),
@@ -515,6 +517,7 @@
         els.bulkCourses.value = '';
         els.bulkTag.value = '';
       });
+      els.importExcelBtn.addEventListener('click', importExcel);
       els.exportExcelBtn.addEventListener('click', exportExcel);
       els.searchInput.addEventListener('input', e => {
         filters.search = e.target.value.trim().toLowerCase();
@@ -868,6 +871,33 @@
 
 
 
+
+
+    async function importExcel() {
+      if (!window.showOpenFilePicker) {
+        alert('Din webbläsare saknar stöd för att importera Excel-filer via filväljaren.');
+        return;
+      }
+
+      try {
+        const [handle] = await window.showOpenFilePicker({
+          multiple: false,
+          types: [{
+            description: 'Excel-fil',
+            accept: {
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
+            }
+          }]
+        });
+
+        if (!handle) return;
+        await loadStateFromHandle(handle);
+        await storeFileHandle(handle);
+      } catch (error) {
+        if (error?.name === 'AbortError') return;
+        alert('Kunde inte importera filen. Kontrollera filformatet och försök igen.');
+      }
+    }
 
     async function exportExcel() {
       if (!window.showSaveFilePicker && !saveFileHandle) {
