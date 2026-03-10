@@ -511,6 +511,7 @@
     bindEvents();
     hydrateSettings();
     render();
+    void loadFromSavedExcelOnOpen();
 
     function bindEvents() {
       els.saveSettingsBtn.addEventListener('click', saveCheckSettings);
@@ -592,6 +593,22 @@
         await saveWorkbookToHandle(saveFileHandle, { showGuide: false, showSuccess: false });
       } catch {
         // Ignore close-save errors.
+      }
+    }
+
+    async function loadFromSavedExcelOnOpen() {
+      if (!window.showOpenFilePicker) return;
+
+      const savedHandle = await getStoredFileHandle();
+      if (!savedHandle) return;
+
+      try {
+        const permission = await savedHandle.queryPermission({ mode: 'read' });
+        if (permission !== 'granted') return;
+
+        await loadStateFromHandle(savedHandle);
+      } catch {
+        // Ignore restore errors so app can still be used.
       }
     }
 
@@ -918,10 +935,116 @@ Skriv ja för att bekräfta.`);
             }
           }]
         });
+        await storeFileHandle(saveFileHandle);
       } catch (error) {
         if (error?.name === 'AbortError') return;
         throw error;
       }
+    }
+
+    async function loadStateFromHandle(handle) {
+      if (!window.XLSX) await ensureXlsxLibrary();
+
+      const file = await handle.getFile();
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+
+      const loadedState = parseWorkbook(workbook);
+      state = loadedState;
+      saveFileHandle = handle;
+      hasUnsavedChanges = false;
+
+      hydrateSettings();
+      render();
+    }
+
+    function parseWorkbook(workbook) {
+      const settingsSheet = workbook.Sheets['Inställningar'];
+      const rowsSheet = workbook.Sheets['Poster'];
+
+      const parsedLabels = ['MoP 1', 'MoP 2', 'MoP 3'];
+      if (settingsSheet) {
+        const settingsRows = XLSX.utils.sheet_to_json(settingsSheet, { header: 1, defval: '' });
+        settingsRows.forEach(row => {
+          const key = String(row[0] || '').trim();
+          const value = String(row[1] || '').trim();
+          if (key === 'MoP 1' && value) parsedLabels[0] = value;
+          if (key === 'MoP 2' && value) parsedLabels[1] = value;
+          if (key === 'MoP 3' && value) parsedLabels[2] = value;
+        });
+      }
+
+      const courses = [];
+      if (rowsSheet) {
+        const rows = XLSX.utils.sheet_to_json(rowsSheet, { header: 1, defval: '' });
+        rows.slice(1).forEach((row, index) => {
+          const name = String(row[0] || '').trim();
+          if (!name) return;
+
+          const tag = String(row[1] || '').trim() || 'Utan Avd';
+          const checks = [row[2], row[3], row[4]].map(value => String(value).trim().toLowerCase() === 'ja');
+          const createdAtRaw = row[6];
+          const createdAt = Number.isFinite(Date.parse(createdAtRaw)) ? Date.parse(createdAtRaw) : Date.now() + index;
+
+          courses.push({
+            id: crypto.randomUUID ? crypto.randomUUID() : `${createdAt}-${index}-${Math.random().toString(36).slice(2)}`,
+            course: name,
+            tag,
+            checks,
+            createdAt
+          });
+        });
+      }
+
+      return {
+        settings: {
+          checkLabels: parsedLabels
+        },
+        courses
+      };
+    }
+
+    async function storeFileHandle(handle) {
+      const db = await openHandleDb();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction('handles', 'readwrite');
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        tx.onerror = () => {
+          db.close();
+          reject(tx.error);
+        };
+        tx.objectStore('handles').put(handle, 'lastExcelFile');
+      });
+    }
+
+    async function getStoredFileHandle() {
+      const db = await openHandleDb();
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction('handles', 'readonly');
+        const request = tx.objectStore('handles').get('lastExcelFile');
+        request.onsuccess = () => {
+          db.close();
+          resolve(request.result || null);
+        };
+        request.onerror = () => {
+          db.close();
+          reject(request.error);
+        };
+      });
+    }
+
+    function openHandleDb() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open('moptracker-file-handles', 1);
+        request.onupgradeneeded = () => {
+          request.result.createObjectStore('handles');
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
     }
 
     function buildWorkbook() {
