@@ -265,6 +265,21 @@
       font-size: 0.85rem;
     }
 
+    .pagination {
+      margin-top: 12px;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .pagination-info {
+      color: var(--muted);
+      font-size: 0.88rem;
+      min-width: 120px;
+      text-align: center;
+    }
+
     .chart-list {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -461,6 +476,11 @@
               <tbody id="courseTableBody"></tbody>
             </table>
           </div>
+          <div class="pagination">
+            <button class="btn secondary" id="prevPageBtn" type="button">Föregående</button>
+            <span class="pagination-info" id="pageInfo">Sida 1 / 1</span>
+            <button class="btn secondary" id="nextPageBtn" type="button">Nästa</button>
+          </div>
 
           <div class="chart-list">
             <div class="chart-box">
@@ -526,6 +546,10 @@
     let networkLockHandle = null;
     let networkLockStream = null;
 
+    const COURSES_PER_PAGE = 10;
+    let currentPage = 1;
+    let lastTotalPages = 1;
+
     const els = {
       check1Label: document.getElementById('check1Label'),
       check2Label: document.getElementById('check2Label'),
@@ -544,6 +568,9 @@
       resetFiltersBtn: document.getElementById('resetFiltersBtn'),
       statsGrid: document.getElementById('statsGrid'),
       courseTableBody: document.getElementById('courseTableBody'),
+      prevPageBtn: document.getElementById('prevPageBtn'),
+      nextPageBtn: document.getElementById('nextPageBtn'),
+      pageInfo: document.getElementById('pageInfo'),
       tagStats: document.getElementById('tagStats'),
       checkStats: document.getElementById('checkStats'),
       mopMatrixHead: document.getElementById('mopMatrixHead'),
@@ -582,18 +609,22 @@
       });
       els.searchInput.addEventListener('input', e => {
         filters.search = e.target.value.trim().toLowerCase();
+        currentPage = 1;
         render();
       });
       els.tagFilter.addEventListener('change', e => {
         filters.tag = e.target.value;
+        currentPage = 1;
         render();
       });
       els.checkFilter.addEventListener('change', e => {
         filters.check = e.target.value;
+        currentPage = 1;
         render();
       });
       els.sortBy.addEventListener('change', e => {
         filters.sortBy = e.target.value;
+        currentPage = 1;
         render();
       });
       els.resetFiltersBtn.addEventListener('click', () => {
@@ -605,7 +636,22 @@
         els.tagFilter.value = 'all';
         els.checkFilter.value = 'all';
         els.sortBy.value = 'created_desc';
+        currentPage = 1;
         render();
+      });
+
+      els.prevPageBtn.addEventListener('click', () => {
+        if (currentPage > 1) {
+          currentPage -= 1;
+          render();
+        }
+      });
+
+      els.nextPageBtn.addEventListener('click', () => {
+        if (currentPage < lastTotalPages) {
+          currentPage += 1;
+          render();
+        }
       });
 
       els.courseTableBody.addEventListener('change', e => {
@@ -867,6 +913,7 @@
       state.courses.unshift(...newCourses);
       markDirty();
       els.bulkCourses.value = '';
+      currentPage = 1;
       render();
     }
 
@@ -928,9 +975,18 @@
 
     function render() {
       const filtered = getFilteredCourses();
+      const totalPages = Math.max(1, Math.ceil(filtered.length / COURSES_PER_PAGE));
+      lastTotalPages = totalPages;
+      if (currentPage > totalPages) currentPage = totalPages;
+      if (currentPage < 1) currentPage = 1;
+
+      const start = (currentPage - 1) * COURSES_PER_PAGE;
+      const paged = filtered.slice(start, start + COURSES_PER_PAGE);
+
       renderFilters();
       renderStats(filtered);
-      renderTable(filtered);
+      renderTable(paged);
+      renderPagination(filtered.length, totalPages);
       renderBars(filtered);
       renderMopMatrix(filtered);
     }
@@ -1008,6 +1064,16 @@
 
     }
 
+    function renderPagination(filteredCount, totalPages) {
+      const startItem = filteredCount ? ((currentPage - 1) * COURSES_PER_PAGE) + 1 : 0;
+      const endItem = filteredCount ? Math.min(currentPage * COURSES_PER_PAGE, filteredCount) : 0;
+      els.pageInfo.textContent = filteredCount
+        ? `Sida ${currentPage} / ${totalPages} (${startItem}-${endItem} av ${filteredCount})`
+        : 'Sida 1 / 1 (0 av 0)';
+      els.prevPageBtn.disabled = currentPage <= 1 || filteredCount === 0;
+      els.nextPageBtn.disabled = currentPage >= totalPages || filteredCount === 0;
+    }
+
     function renderBars(filtered) {
       const total = filtered.length || 1;
       const tagCounts = {};
@@ -1064,22 +1130,27 @@
         const subset = filtered.filter(c => c.tag === avd);
         const mopCounts = labels.map((_, idx) => subset.filter(c => c.checks[idx]).length);
         const mopPct = mopCounts.map(count => (subset.length ? (count / subset.length) * 100 : 0));
-        const shareOfTotal = (subset.length / total) * 100;
+        const totalMopPctPerAvd = subset.length
+          ? (mopCounts.reduce((sum, count) => sum + count, 0) / (subset.length * labels.length)) * 100
+          : 0;
         return `
           <tr>
             <td><strong>${escapeHtml(avd)}</strong></td>
             ${mopPct.map(value => `<td><span class="badge">${value.toFixed(1)} %</span></td>`).join('')}
-            <td><span class="badge">${shareOfTotal.toFixed(1)} %</span></td>
+            <td><span class="badge">${totalMopPctPerAvd.toFixed(1)} %</span></td>
           </tr>
         `;
       });
 
       const totalMopPct = labels.map((_, idx) => (filtered.filter(c => c.checks[idx]).length / total) * 100);
+      const overallMopPct = labels.length
+        ? (totalMopPct.reduce((sum, value) => sum + value, 0) / labels.length)
+        : 0;
       rows.push(`
         <tr>
           <td><strong>Totalt</strong></td>
           ${totalMopPct.map(value => `<td><span class="badge">${value.toFixed(1)} %</span></td>`).join('')}
-          <td><span class="badge">100.0 %</span></td>
+          <td><span class="badge">${overallMopPct.toFixed(1)} %</span></td>
         </tr>
       `);
 
