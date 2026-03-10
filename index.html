@@ -345,7 +345,7 @@
         <p>Lägg in många poster som textsträngar, koppla dem till Avd, markera tre valfria MoP och få statistik direkt. Allt sparas lokalt i webbläsaren, eftersom människor av någon anledning gärna vill att data faktiskt ligger kvar.</p>
       </div>
       <div class="hero-actions">
-        <button class="btn success" id="exportExcelBtn">Exportera Excel</button>
+        <button class="btn success" id="exportExcelBtn">Spara</button>
       </div>
     </section>
 
@@ -881,6 +881,11 @@ Skriv ja för att bekräfta.`);
     async function exportExcel() {
       await ensureXlsxLibrary();
 
+      alert('Sparguide:
+1) Välj samma mapp som index-filen ligger i.
+2) Välj filnamnet uppfoljning-digital-infrastruktur.xlsx.
+3) Om filen redan finns, välj att skriva över den befintliga filen.');
+
       const header = ['Post', 'Avd', state.settings.checkLabels[0], state.settings.checkLabels[1], state.settings.checkLabels[2], 'Antal bockar', 'Skapad'];
       const dataRows = state.courses.map(c => ([
         c.course,
@@ -903,7 +908,32 @@ Skriv ja för att bekräfta.`);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Poster');
       XLSX.utils.book_append_sheet(workbook, settingsSheet, 'Inställningar');
-      XLSX.writeFile(workbook, 'uppfoljning-digital-infrastruktur.xlsx');
+
+      if (!window.showSaveFilePicker) {
+        alert('Din webbläsare saknar filväljare med platsval. Filen laddas ner i webbläsarens standardmapp.');
+        XLSX.writeFile(workbook, 'uppfoljning-digital-infrastruktur.xlsx');
+        return;
+      }
+
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: 'uppfoljning-digital-infrastruktur.xlsx',
+          types: [{
+            description: 'Excel-fil',
+            accept: {
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
+            }
+          }]
+        });
+
+        const writable = await handle.createWritable({ keepExistingData: false });
+        const data = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
+        await writable.write(data);
+        await writable.close();
+      } catch (error) {
+        if (error?.name === 'AbortError') return;
+        alert('Kunde inte spara filen. Kontrollera filval och försök igen.');
+      }
     }
 
 
