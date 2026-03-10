@@ -782,7 +782,7 @@
 
     function applyStoredTheme() {
       const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
-      setTheme(savedTheme === 'light' ? 'light' : 'dark');
+      setTheme(savedTheme === 'dark' ? 'dark' : 'light');
     }
 
     function setTheme(theme) {
