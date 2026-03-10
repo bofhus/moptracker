@@ -548,6 +548,7 @@
 
     const COURSES_PER_PAGE = 20;
     let currentPage = 1;
+    let lastTotalPages = 1;
 
     const els = {
       check1Label: document.getElementById('check1Label'),
@@ -647,9 +648,7 @@
       });
 
       els.nextPageBtn.addEventListener('click', () => {
-        const filteredCount = getFilteredCourses().length;
-        const totalPages = Math.max(1, Math.ceil(filteredCount / COURSES_PER_PAGE));
-        if (currentPage < totalPages) {
+        if (currentPage < lastTotalPages) {
           currentPage += 1;
           render();
         }
@@ -977,6 +976,7 @@
     function render() {
       const filtered = getFilteredCourses();
       const totalPages = Math.max(1, Math.ceil(filtered.length / COURSES_PER_PAGE));
+      lastTotalPages = totalPages;
       if (currentPage > totalPages) currentPage = totalPages;
       if (currentPage < 1) currentPage = 1;
 
@@ -1065,7 +1065,11 @@
     }
 
     function renderPagination(filteredCount, totalPages) {
-      els.pageInfo.textContent = `Sida ${currentPage} / ${totalPages}`;
+      const startItem = filteredCount ? ((currentPage - 1) * COURSES_PER_PAGE) + 1 : 0;
+      const endItem = filteredCount ? Math.min(currentPage * COURSES_PER_PAGE, filteredCount) : 0;
+      els.pageInfo.textContent = filteredCount
+        ? `Sida ${currentPage} / ${totalPages} (${startItem}-${endItem} av ${filteredCount})`
+        : 'Sida 1 / 1 (0 av 0)';
       els.prevPageBtn.disabled = currentPage <= 1 || filteredCount === 0;
       els.nextPageBtn.disabled = currentPage >= totalPages || filteredCount === 0;
     }
