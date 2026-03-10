@@ -618,7 +618,6 @@
     const NETWORK_LOCK_HEARTBEAT_MS = 8000;
     const NETWORK_LOCK_HANDLE_KEY = 'networkLockFile';
     const LAST_WORKBOOK_KEY = 'lastSavedWorkbook';
-    const THEME_STORAGE_KEY = 'moptracker-theme';
     const tabId = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
     let lockHeartbeatTimer = null;
     let networkLockTimer = null;
