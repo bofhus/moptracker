@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Uppföljning a etablering av digital infrastruktur</title>
+  <title>Uppföljning av etablering av digital infrastruktur</title>
   <style>
     :root {
       --bg: #0b1020;
@@ -311,6 +311,18 @@
       font-size: 0.9rem;
     }
 
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     @media (max-width: 1100px) {
       .layout { grid-template-columns: 1fr; }
       .toolbar { grid-template-columns: 1fr 1fr; }
@@ -329,14 +341,15 @@
   <div class="container">
     <section class="hero">
       <div>
-        <h1>Uppföljning a etablering av digital infrastruktur</h1>
+        <h1>Uppföljning av etablering av digital infrastruktur</h1>
         <p>Lägg in många poster som textsträngar, koppla dem till Avd, markera tre valfria MoP och få statistik direkt. Allt sparas lokalt i webbläsaren, eftersom människor av någon anledning gärna vill att data faktiskt ligger kvar.</p>
       </div>
       <div class="hero-actions">
         <button class="btn success" id="exportJsonBtn">Exportera JSON</button>
         <button class="btn secondary" id="exportCsvBtn">Exportera CSV</button>
-        <label class="btn ghost" for="importFile" style="display:inline-flex;align-items:center;">Importera data</label>
-        <input id="importFile" type="file" accept="application/json" hidden />
+        <button class="btn secondary" id="exportExcelBtn">Exportera Excel</button>
+        <label class="btn ghost" for="importFile" style="display:inline-flex;align-items:center;">Importera JSON/Excel</label>
+        <input id="importFile" type="file" accept=".json,application/json,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden />
       </div>
     </section>
 
@@ -392,7 +405,7 @@
 
       <main class="panel">
         <div class="panel-inner">
-          <div class="stats-grid" id="statsGrid"></div>
+          <div class="stats-grid" id="statsGrid" role="status" aria-live="polite"></div>
 
           <div class="toolbar">
             <div>
@@ -426,13 +439,14 @@
 
           <div class="table-wrap">
             <table>
+              <caption class="sr-only">Poster med avdelning, markerade MoP och tillgängliga åtgärder</caption>
               <thead>
                 <tr>
-                  <th style="width: 32%;">Post</th>
-                  <th style="width: 18%;">Avd</th>
-                  <th style="width: 28%;">MoP</th>
-                  <th style="width: 12%;">Antal</th>
-                  <th style="width: 10%;">Åtgärder</th>
+                  <th scope="col" style="width: 32%;">Post</th>
+                  <th scope="col" style="width: 18%;">Avd</th>
+                  <th scope="col" style="width: 28%;">MoP</th>
+                  <th scope="col" style="width: 12%;">Antal</th>
+                  <th scope="col" style="width: 10%;">Åtgärder</th>
                 </tr>
               </thead>
               <tbody id="courseTableBody"></tbody>
@@ -467,6 +481,7 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script>
     const STORAGE_KEY = 'course-tag-app-v2';
 
@@ -492,6 +507,7 @@
       clearAllBtn: document.getElementById('clearAllBtn'),
       exportJsonBtn: document.getElementById('exportJsonBtn'),
       exportCsvBtn: document.getElementById('exportCsvBtn'),
+      exportExcelBtn: document.getElementById('exportExcelBtn'),
       importFile: document.getElementById('importFile'),
       searchInput: document.getElementById('searchInput'),
       tagFilter: document.getElementById('tagFilter'),
@@ -528,7 +544,8 @@
       els.clearAllBtn.addEventListener('click', clearAll);
       els.exportJsonBtn.addEventListener('click', exportJson);
       els.exportCsvBtn.addEventListener('click', exportCsv);
-      els.importFile.addEventListener('change', importJson);
+      els.exportExcelBtn.addEventListener('click', exportExcel);
+      els.importFile.addEventListener('change', importData);
       els.searchInput.addEventListener('input', e => {
         filters.search = e.target.value.trim().toLowerCase();
         render();
@@ -555,6 +572,25 @@
         els.checkFilter.value = 'all';
         els.sortBy.value = 'created_desc';
         render();
+      });
+
+      els.courseTableBody.addEventListener('change', e => {
+        if (e.target.matches('input[type="checkbox"][data-course-id][data-check-index]')) {
+          const courseId = e.target.dataset.courseId;
+          const index = Number(e.target.dataset.checkIndex);
+          updateCourseCheck(courseId, index, e.target.checked);
+          return;
+        }
+
+        if (e.target.matches('input[data-tag-id]')) {
+          updateCourseTag(e.target.dataset.tagId, e.target.value);
+        }
+      });
+
+      els.courseTableBody.addEventListener('click', e => {
+        const btn = e.target.closest('button[data-delete-id]');
+        if (!btn) return;
+        deleteCourse(btn.dataset.deleteId);
       });
     }
 
@@ -644,8 +680,14 @@
     }
 
     function clearAll() {
-      const confirmed = confirm('Detta raderar all sparad kursdata.');
-      if (!confirmed) return;
+      if (!state.courses.length) {
+        alert('Det finns ingen data att radera.');
+        return;
+      }
+
+      const items = state.courses.map(c => c.course);
+      if (!confirmDeleteWithTyping(items, 'radera all sparad data')) return;
+
       state = structuredClone(defaultState);
       hydrateSettings();
       saveState();
@@ -669,6 +711,11 @@
     }
 
     function deleteCourse(courseId) {
+      const course = state.courses.find(c => c.id === courseId);
+      if (!course) return;
+
+      if (!confirmDeleteWithTyping([course.course], 'ta bort posten')) return;
+
       state.courses = state.courses.filter(c => c.id !== courseId);
       saveState();
       render();
@@ -720,11 +767,12 @@
     }
 
     function render() {
+      const filtered = getFilteredCourses();
       renderFilters();
-      renderStats();
-      renderTable();
-      renderBars();
-      renderMopMatrix();
+      renderStats(filtered);
+      renderTable(filtered);
+      renderBars(filtered);
+      renderMopMatrix(filtered);
     }
 
     function renderFilters() {
@@ -748,8 +796,7 @@
       els.checkFilter.value = filters.check;
     }
 
-    function renderStats() {
-      const filtered = getFilteredCourses();
+    function renderStats(filtered) {
       const total = state.courses.length;
       const shown = filtered.length;
       const uniqueTags = new Set(filtered.map(c => c.tag)).size;
@@ -770,8 +817,7 @@
       `).join('');
     }
 
-    function renderTable() {
-      const filtered = getFilteredCourses();
+    function renderTable(filtered) {
       if (!filtered.length) {
         els.courseTableBody.innerHTML = `<tr><td colspan="5"><div class="empty">Ingen post matchar filtret just nu.</div></td></tr>`;
         return;
@@ -802,27 +848,9 @@
         `;
       }).join('');
 
-      els.courseTableBody.querySelectorAll('input[type="checkbox"]').forEach(input => {
-        input.addEventListener('change', e => {
-          const courseId = e.target.dataset.courseId;
-          const index = Number(e.target.dataset.checkIndex);
-          updateCourseCheck(courseId, index, e.target.checked);
-        });
-      });
-
-      els.courseTableBody.querySelectorAll('input[data-tag-id]').forEach(input => {
-        input.addEventListener('change', e => {
-          updateCourseTag(e.target.dataset.tagId, e.target.value);
-        });
-      });
-
-      els.courseTableBody.querySelectorAll('button[data-delete-id]').forEach(btn => {
-        btn.addEventListener('click', e => deleteCourse(e.target.dataset.deleteId));
-      });
     }
 
-    function renderBars() {
-      const filtered = getFilteredCourses();
+    function renderBars(filtered) {
       const tagCounts = {};
       filtered.forEach(c => { tagCounts[c.tag] = (tagCounts[c.tag] || 0) + 1; });
       const tagEntries = Object.entries(tagCounts).sort((a,b) => b[1] - a[1]);
@@ -856,14 +884,13 @@
       }).join('');
     }
 
-    function renderMopMatrix() {
-      const filtered = getFilteredCourses();
+    function renderMopMatrix(filtered) {
       const avdList = [...new Set(filtered.map(c => c.tag))].sort((a, b) => a.localeCompare(b, 'sv'));
       const labels = state.settings.checkLabels;
 
-      els.mopMatrixHead.innerHTML = ['<th style="width:28%;">Avd</th>']
-        .concat(labels.map(label => `<th>${escapeHtml(label)}</th>`))
-        .concat(['<th>Totalt</th>'])
+      els.mopMatrixHead.innerHTML = ['<th scope="col" style="width:28%;">Avd</th>']
+        .concat(labels.map(label => `<th scope="col">${escapeHtml(label)}</th>`))
+        .concat(['<th scope="col">Totalt</th>'])
         .join('');
 
       if (!avdList.length) {
@@ -908,41 +935,162 @@
       downloadFile(csv, 'uppfoljning-digital-infrastruktur.csv', 'text/csv;charset=utf-8');
     }
 
-    function importJson(event) {
+    async function importData(event) {
       const file = event.target.files?.[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          const parsed = JSON.parse(reader.result);
-          if (!parsed || !Array.isArray(parsed.courses) || !parsed.settings) {
-            throw new Error('Ogiltig fil');
-          }
-          state = {
-            settings: {
-              checkLabels: Array.isArray(parsed.settings.checkLabels) && parsed.settings.checkLabels.length === 3
-                ? parsed.settings.checkLabels.map((v, i) => String(v || '').trim() || `MoP ${i + 1}`)
-                : [...defaultState.settings.checkLabels]
-            },
-            courses: parsed.courses.map((c, index) => ({
-              id: String(c.id || (crypto.randomUUID ? crypto.randomUUID() : `import-${Date.now()}-${index}`)),
-              course: String(c.course || ''),
-              tag: String(c.tag || 'Utan Avd'),
-              checks: Array.isArray(c.checks) && c.checks.length === 3 ? c.checks.map(Boolean) : [false, false, false],
-              createdAt: Number(c.createdAt || Date.now() + index)
-            }))
-          };
-          saveState();
-          hydrateSettings();
-          render();
-          alert('Data importerad. Någonstans vann ordningen precis över kaoset.');
-        } catch {
-          alert('Det gick inte att läsa filen. Kontrollera att det är en export från appen.');
-        } finally {
-          event.target.value = '';
+
+      try {
+        if (file.name.toLowerCase().endsWith('.xlsx')) {
+          await importExcel(file);
+        } else {
+          await importJson(file);
         }
+      } catch {
+        alert('Det gick inte att läsa filen. Kontrollera att det är en JSON- eller Excel-export från appen.');
+      } finally {
+        event.target.value = '';
+      }
+    }
+
+    async function importJson(file) {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      if (!parsed || !Array.isArray(parsed.courses) || !parsed.settings) {
+        throw new Error('Ogiltig JSON-fil');
+      }
+
+      state = {
+        settings: {
+          checkLabels: Array.isArray(parsed.settings.checkLabels) && parsed.settings.checkLabels.length === 3
+            ? parsed.settings.checkLabels.map((v, i) => String(v || '').trim() || `MoP ${i + 1}`)
+            : [...defaultState.settings.checkLabels]
+        },
+        courses: parsed.courses.map((c, index) => ({
+          id: String(c.id || (crypto.randomUUID ? crypto.randomUUID() : `import-${Date.now()}-${index}`)),
+          course: String(c.course || ''),
+          tag: String(c.tag || 'Utan Avd'),
+          checks: Array.isArray(c.checks) && c.checks.length === 3 ? c.checks.map(Boolean) : [false, false, false],
+          createdAt: Number(c.createdAt || Date.now() + index)
+        }))
       };
-      reader.readAsText(file, 'utf-8');
+
+      saveState();
+      hydrateSettings();
+      render();
+      alert('JSON-data importerad.');
+    }
+
+    async function exportExcel() {
+      await ensureXlsxLibrary();
+
+      const header = ['Post', 'Avd', state.settings.checkLabels[0], state.settings.checkLabels[1], state.settings.checkLabels[2], 'Antal bockar', 'Skapad'];
+      const dataRows = state.courses.map(c => ([
+        c.course,
+        c.tag,
+        c.checks[0] ? 'Ja' : 'Nej',
+        c.checks[1] ? 'Ja' : 'Nej',
+        c.checks[2] ? 'Ja' : 'Nej',
+        countChecks(c),
+        new Date(c.createdAt).toISOString()
+      ]));
+
+      const worksheet = XLSX.utils.aoa_to_sheet([header, ...dataRows]);
+      const settingsSheet = XLSX.utils.aoa_to_sheet([
+        ['Inställning', 'Värde'],
+        ['MoP 1', state.settings.checkLabels[0]],
+        ['MoP 2', state.settings.checkLabels[1]],
+        ['MoP 3', state.settings.checkLabels[2]]
+      ]);
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Poster');
+      XLSX.utils.book_append_sheet(workbook, settingsSheet, 'Inställningar');
+      XLSX.writeFile(workbook, 'uppfoljning-digital-infrastruktur.xlsx');
+    }
+
+    async function importExcel(file) {
+      await ensureXlsxLibrary();
+
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const firstSheetName = workbook.SheetNames[0];
+      if (!firstSheetName) throw new Error('Excel-filen saknar ark');
+
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheetName], { defval: '' });
+      if (!rows.length) throw new Error('Excel-filen saknar rader');
+
+      const keys = Object.keys(rows[0]);
+      const postKey = keys.find(k => ['post', 'kurs'].includes(String(k).trim().toLowerCase())) || keys[0];
+      const tagKey = keys.find(k => ['avd', 'avdelning'].includes(String(k).trim().toLowerCase())) || keys[1];
+
+      const candidateCheckKeys = keys.filter(k => {
+        const normalized = String(k).trim().toLowerCase();
+        return !['post', 'kurs', 'avd', 'avdelning', 'antal bockar', 'skapad', 'id'].includes(normalized);
+      }).slice(0, 3);
+
+      const fallbackCheckKeys = [
+        keys.find(k => String(k).trim().toLowerCase() === 'mop 1'),
+        keys.find(k => String(k).trim().toLowerCase() === 'mop 2'),
+        keys.find(k => String(k).trim().toLowerCase() === 'mop 3')
+      ].filter(Boolean);
+
+      const checkKeys = (candidateCheckKeys.length === 3 ? candidateCheckKeys : fallbackCheckKeys).slice(0, 3);
+      if (checkKeys.length !== 3) throw new Error('Kunde inte hitta tre MoP-kolumner i Excel-filen');
+
+      const now = Date.now();
+      const courses = rows
+        .map((row, index) => {
+          const course = String(row[postKey] || '').trim();
+          if (!course) return null;
+          return {
+            id: crypto.randomUUID ? crypto.randomUUID() : `excel-${now}-${index}`,
+            course,
+            tag: String(row[tagKey] || 'Utan Avd').trim() || 'Utan Avd',
+            checks: checkKeys.map(key => parseExcelBoolean(row[key])),
+            createdAt: now + index
+          };
+        })
+        .filter(Boolean);
+
+      if (!courses.length) throw new Error('Excel-filen innehåller inga giltiga poster');
+
+      state = {
+        settings: {
+          checkLabels: checkKeys.map((label, i) => String(label || `MoP ${i + 1}`).trim() || `MoP ${i + 1}`)
+        },
+        courses
+      };
+
+      saveState();
+      hydrateSettings();
+      render();
+      alert('Excel-data importerad.');
+    }
+
+    function parseExcelBoolean(value) {
+      const normalized = String(value ?? '').trim().toLowerCase();
+      return ['ja', 'true', '1', 'x', 'yes'].includes(normalized);
+    }
+
+    function confirmDeleteWithTyping(items, actionLabel) {
+      const list = items.slice(0, 10).map(item => `- ${item}`).join('\n');
+      const additional = items.length > 10 ? `\n... och ${items.length - 10} till.` : '';
+      const answer = prompt(
+        `Är du helt säker på att du vill ${actionLabel}:\n${list}${additional}\n\nSkriv ja för att bekräfta.`
+      );
+      return typeof answer === 'string' && answer.trim().toLowerCase() === 'ja';
+    }
+
+    async function ensureXlsxLibrary() {
+      if (window.XLSX) return;
+
+      await new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+        script.onload = resolve;
+        script.onerror = () => reject(new Error('Kunde inte ladda Excel-biblioteket'));
+        document.head.appendChild(script);
+      });
     }
 
     function downloadFile(content, filename, type) {
