@@ -345,8 +345,7 @@
         <p>Lägg in många poster som textsträngar, koppla dem till Avd, markera tre valfria MoP och få statistik direkt. Allt sparas lokalt i webbläsaren, eftersom människor av någon anledning gärna vill att data faktiskt ligger kvar.</p>
       </div>
       <div class="hero-actions">
-        <button class="btn success" id="exportJsonBtn">Exportera JSON</button>
-        <button class="btn secondary" id="exportExcelBtn">Exportera Excel</button>
+        <button class="btn success" id="exportExcelBtn">Exportera Excel</button>
       </div>
     </section>
 
@@ -488,7 +487,6 @@
       bulkTag: document.getElementById('bulkTag'),
       addCoursesBtn: document.getElementById('addCoursesBtn'),
       clearInputBtn: document.getElementById('clearInputBtn'),
-      exportJsonBtn: document.getElementById('exportJsonBtn'),
       exportExcelBtn: document.getElementById('exportExcelBtn'),
       searchInput: document.getElementById('searchInput'),
       tagFilter: document.getElementById('tagFilter'),
@@ -521,7 +519,6 @@
         els.bulkCourses.value = '';
         els.bulkTag.value = '';
       });
-      els.exportJsonBtn.addEventListener('click', exportJson);
       els.exportExcelBtn.addEventListener('click', exportExcel);
       els.searchInput.addEventListener('input', e => {
         filters.search = e.target.value.trim().toLowerCase();
@@ -877,9 +874,6 @@ Skriv ja för att bekräfta.`);
       els.mopMatrixBody.innerHTML = rows.join('');
     }
 
-    function exportJson() {
-      downloadFile(JSON.stringify(state, null, 2), 'uppfoljning-digital-infrastruktur.json', 'application/json');
-    }
 
 
 
@@ -909,28 +903,7 @@ Skriv ja för att bekräfta.`);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Poster');
       XLSX.utils.book_append_sheet(workbook, settingsSheet, 'Inställningar');
-
-      const filename = 'uppfoljning-digital-infrastruktur.xlsx';
-      if (window.showSaveFilePicker) {
-        try {
-          const handle = await window.showSaveFilePicker({
-            suggestedName: filename,
-            types: [{
-              description: 'Excel-fil',
-              accept: {'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']}
-            }]
-          });
-          const writable = await handle.createWritable();
-          const arrayBuffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
-          await writable.write(arrayBuffer);
-          await writable.close();
-          return;
-        } catch (error) {
-          if (error && error.name === 'AbortError') return;
-        }
-      }
-
-      XLSX.writeFile(workbook, filename);
+      XLSX.writeFile(workbook, 'uppfoljning-digital-infrastruktur.xlsx');
     }
 
 
@@ -948,17 +921,6 @@ Skriv ja för att bekräfta.`);
       });
     }
 
-    function downloadFile(content, filename, type) {
-      const blob = new Blob([content], { type });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    }
 
 
     function escapeHtml(value) {
