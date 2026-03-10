@@ -1,0 +1,976 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Uppföljning a etablering av digital infrastruktur</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: rgba(17, 24, 39, 0.78);
+      --panel-2: rgba(30, 41, 59, 0.72);
+      --border: rgba(148, 163, 184, 0.2);
+      --text: #e5eefb;
+      --muted: #9fb0cd;
+      --accent: #7c3aed;
+      --accent-2: #06b6d4;
+      --success: #10b981;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --shadow: 0 20px 60px rgba(0,0,0,0.35);
+      --radius: 20px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(124,58,237,0.22), transparent 35%),
+        radial-gradient(circle at top right, rgba(6,182,212,0.18), transparent 30%),
+        linear-gradient(180deg, #0b1020 0%, #121a2f 100%);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .container {
+      width: min(1400px, calc(100% - 32px));
+      margin: 24px auto 40px;
+    }
+
+    .hero {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 24px;
+      margin-bottom: 20px;
+      padding: 28px;
+      background: linear-gradient(135deg, rgba(124,58,237,0.16), rgba(6,182,212,0.1));
+      border: 1px solid var(--border);
+      backdrop-filter: blur(18px);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero h1 {
+      margin: 0 0 8px;
+      font-size: clamp(1.9rem, 4vw, 3rem);
+      line-height: 1.05;
+    }
+
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      max-width: 860px;
+      line-height: 1.55;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 20px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(16px);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .panel-inner { padding: 22px; }
+
+    h2 {
+      font-size: 1.05rem;
+      margin: 0 0 14px;
+    }
+
+    .stack { display: grid; gap: 14px; }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 0.92rem;
+      color: var(--muted);
+    }
+
+    input[type="text"], textarea, select {
+      width: 100%;
+      border: 1px solid rgba(148,163,184,0.18);
+      background: rgba(15,23,42,0.72);
+      color: var(--text);
+      border-radius: 14px;
+      padding: 12px 14px;
+      outline: none;
+      transition: border-color 0.2s, transform 0.15s;
+      font: inherit;
+    }
+
+    input[type="text"]:focus, textarea:focus, select:focus {
+      border-color: rgba(124,58,237,0.7);
+      transform: translateY(-1px);
+    }
+
+    textarea { min-height: 140px; resize: vertical; }
+
+    .btn {
+      border: 0;
+      border-radius: 14px;
+      padding: 11px 16px;
+      font: inherit;
+      color: white;
+      cursor: pointer;
+      background: linear-gradient(135deg, var(--accent), #5b21b6);
+      box-shadow: 0 10px 24px rgba(124,58,237,0.28);
+      transition: transform 0.15s ease, opacity 0.2s ease;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn.secondary {
+      background: rgba(30,41,59,0.9);
+      box-shadow: none;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn.ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      box-shadow: none;
+    }
+    .btn.success { background: linear-gradient(135deg, #059669, #10b981); }
+    .btn.warn { background: linear-gradient(135deg, #d97706, #f59e0b); }
+    .btn.danger { background: linear-gradient(135deg, #dc2626, #ef4444); }
+
+    .button-row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    .small {
+      font-size: 0.88rem;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .stat-card {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 16px;
+    }
+
+    .stat-label {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-size: 1.8rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr 1fr 1fr auto;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: rgba(15,23,42,0.45);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 920px;
+    }
+
+    th, td {
+      padding: 14px 14px;
+      border-bottom: 1px solid rgba(148,163,184,0.12);
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: rgba(15,23,42,0.96);
+      z-index: 1;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    tr:hover td {
+      background: rgba(124,58,237,0.05);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(124,58,237,0.16);
+      border: 1px solid rgba(124,58,237,0.28);
+      font-size: 0.85rem;
+      margin: 2px 6px 2px 0;
+    }
+
+    .check-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .check-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.2);
+      background: rgba(30,41,59,0.7);
+      cursor: pointer;
+      user-select: none;
+      font-size: 0.9rem;
+    }
+
+    .check-pill input { accent-color: var(--accent-2); }
+    .row-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .empty {
+      text-align: center;
+      padding: 32px 20px;
+      color: var(--muted);
+    }
+
+    .footer-note {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .chart-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 18px;
+    }
+
+    .chart-box {
+      background: rgba(15,23,42,0.5);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 16px;
+    }
+
+    .bar-list { display: grid; gap: 10px; margin-top: 10px; }
+    .bar-item { display: grid; gap: 6px; }
+    .bar-line {
+      height: 10px;
+      background: rgba(51,65,85,0.85);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      border-radius: 999px;
+    }
+
+    .inline-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .muted-box {
+      padding: 12px 14px;
+      background: rgba(15,23,42,0.45);
+      border: 1px dashed rgba(148,163,184,0.22);
+      border-radius: 14px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 1100px) {
+      .layout { grid-template-columns: 1fr; }
+      .toolbar { grid-template-columns: 1fr 1fr; }
+      .stats-grid, .chart-list, .inline-3 { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 720px) {
+      .container { width: min(100% - 20px, 1400px); }
+      .hero { padding: 22px; }
+      .hero-actions { justify-content: flex-start; }
+      .toolbar, .stats-grid, .chart-list, .inline-3 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <section class="hero">
+      <div>
+        <h1>Uppföljning a etablering av digital infrastruktur</h1>
+        <p>Lägg in många poster som textsträngar, koppla dem till Avd, markera tre valfria MoP och få statistik direkt. Allt sparas lokalt i webbläsaren, eftersom människor av någon anledning gärna vill att data faktiskt ligger kvar.</p>
+      </div>
+      <div class="hero-actions">
+        <button class="btn success" id="exportJsonBtn">Exportera JSON</button>
+        <button class="btn secondary" id="exportCsvBtn">Exportera CSV</button>
+        <label class="btn ghost" for="importFile" style="display:inline-flex;align-items:center;">Importera data</label>
+        <input id="importFile" type="file" accept="application/json" hidden />
+      </div>
+    </section>
+
+    <div class="layout">
+      <aside class="panel">
+        <div class="panel-inner stack">
+          <div>
+            <h2>Inställningar för MoP</h2>
+            <div class="inline-3">
+              <div>
+                <label for="check1Label">MoP 1</label>
+                <input id="check1Label" type="text" placeholder="Exempel: Klar" />
+              </div>
+              <div>
+                <label for="check2Label">MoP 2</label>
+                <input id="check2Label" type="text" placeholder="Exempel: Granskad" />
+              </div>
+              <div>
+                <label for="check3Label">MoP 3</label>
+                <input id="check3Label" type="text" placeholder="Exempel: Prioriterad" />
+              </div>
+            </div>
+            <div class="button-row" style="margin-top:12px;">
+              <button class="btn" id="saveSettingsBtn">Spara MoP-namn</button>
+            </div>
+          </div>
+
+          <div>
+            <h2>Lägg till poster</h2>
+            <label for="bulkCourses">En post per rad</label>
+            <textarea id="bulkCourses" placeholder="Exempel:\nDatabaser 7.5 hp\nWebbutveckling 15 hp\nInformationssäkerhet 7.5 hp"></textarea>
+            <label for="bulkTag">Avd</label>
+            <input id="bulkTag" type="text" placeholder="Exempel: IT, HR, Ekonomi" />
+            <div class="button-row" style="margin-top:12px;">
+              <button class="btn" id="addCoursesBtn">Lägg till poster</button>
+              <button class="btn secondary" id="clearInputBtn">Rensa fält</button>
+            </div>
+            <div class="footer-note">Tips: samma Avd sätts på alla rader du lägger in samtidigt.</div>
+          </div>
+
+          <div>
+            <h2>Datahantering</h2>
+            <div class="button-row">
+              <button class="btn warn" id="seedDemoBtn">Lägg in demo</button>
+              <button class="btn danger" id="clearAllBtn">Radera all data</button>
+            </div>
+            <div class="muted-box" style="margin-top:12px;">
+              All data sparas automatiskt i din webbläsare via localStorage. Export/import finns också, för ren självdestruktion är fortfarande ett märkligt arbetssätt.
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <main class="panel">
+        <div class="panel-inner">
+          <div class="stats-grid" id="statsGrid"></div>
+
+          <div class="toolbar">
+            <div>
+              <label for="searchInput">Sök post</label>
+              <input id="searchInput" type="text" placeholder="Sök i namn eller Avd" />
+            </div>
+            <div>
+              <label for="tagFilter">Filtrera Avd</label>
+              <select id="tagFilter"></select>
+            </div>
+            <div>
+              <label for="checkFilter">Filtrera MoP-status</label>
+              <select id="checkFilter"></select>
+            </div>
+            <div>
+              <label for="sortBy">Sortera</label>
+              <select id="sortBy">
+                <option value="created_desc">Nyast först</option>
+                <option value="created_asc">Äldst först</option>
+                <option value="course_asc">Postnamn A-Ö</option>
+                <option value="course_desc">Postnamn Ö-A</option>
+                <option value="tag_asc">Avd A-Ö</option>
+                <option value="checks_desc">Flest MoP först</option>
+                <option value="checks_asc">Färst MoP först</option>
+              </select>
+            </div>
+            <div style="display:flex;align-items:flex-end;">
+              <button class="btn secondary" id="resetFiltersBtn">Nollställ</button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 32%;">Post</th>
+                  <th style="width: 18%;">Avd</th>
+                  <th style="width: 28%;">MoP</th>
+                  <th style="width: 12%;">Antal</th>
+                  <th style="width: 10%;">Åtgärder</th>
+                </tr>
+              </thead>
+              <tbody id="courseTableBody"></tbody>
+            </table>
+          </div>
+
+          <div class="chart-list">
+            <div class="chart-box">
+              <h2>Statistik per Avd</h2>
+              <div id="tagStats" class="bar-list"></div>
+            </div>
+            <div class="chart-box">
+              <h2>Statistik per MoP</h2>
+              <div id="checkStats" class="bar-list"></div>
+            </div>
+          </div>
+
+          <div class="chart-box" style="margin-top:18px;">
+            <h2>MoP per Avd</h2>
+            <div class="small">Visar hur många poster inom varje Avd som har respektive MoP markerad i aktuellt urval.</div>
+            <div class="table-wrap" style="margin-top:12px;">
+              <table>
+                <thead>
+                  <tr id="mopMatrixHead"></tr>
+                </thead>
+                <tbody id="mopMatrixBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'course-tag-app-v2';
+
+    const defaultState = {
+      settings: {
+        checkLabels: ['MoP 1', 'MoP 2', 'MoP 3']
+      },
+      courses: []
+    };
+
+    let state = loadState();
+
+    const els = {
+      check1Label: document.getElementById('check1Label'),
+      check2Label: document.getElementById('check2Label'),
+      check3Label: document.getElementById('check3Label'),
+      saveSettingsBtn: document.getElementById('saveSettingsBtn'),
+      bulkCourses: document.getElementById('bulkCourses'),
+      bulkTag: document.getElementById('bulkTag'),
+      addCoursesBtn: document.getElementById('addCoursesBtn'),
+      clearInputBtn: document.getElementById('clearInputBtn'),
+      seedDemoBtn: document.getElementById('seedDemoBtn'),
+      clearAllBtn: document.getElementById('clearAllBtn'),
+      exportJsonBtn: document.getElementById('exportJsonBtn'),
+      exportCsvBtn: document.getElementById('exportCsvBtn'),
+      importFile: document.getElementById('importFile'),
+      searchInput: document.getElementById('searchInput'),
+      tagFilter: document.getElementById('tagFilter'),
+      checkFilter: document.getElementById('checkFilter'),
+      sortBy: document.getElementById('sortBy'),
+      resetFiltersBtn: document.getElementById('resetFiltersBtn'),
+      statsGrid: document.getElementById('statsGrid'),
+      courseTableBody: document.getElementById('courseTableBody'),
+      tagStats: document.getElementById('tagStats'),
+      checkStats: document.getElementById('checkStats'),
+      mopMatrixHead: document.getElementById('mopMatrixHead'),
+      mopMatrixBody: document.getElementById('mopMatrixBody')
+    };
+
+    const filters = {
+      search: '',
+      tag: 'all',
+      check: 'all',
+      sortBy: 'created_desc'
+    };
+
+    bindEvents();
+    hydrateSettings();
+    render();
+
+    function bindEvents() {
+      els.saveSettingsBtn.addEventListener('click', saveCheckSettings);
+      els.addCoursesBtn.addEventListener('click', addCourses);
+      els.clearInputBtn.addEventListener('click', () => {
+        els.bulkCourses.value = '';
+        els.bulkTag.value = '';
+      });
+      els.seedDemoBtn.addEventListener('click', seedDemo);
+      els.clearAllBtn.addEventListener('click', clearAll);
+      els.exportJsonBtn.addEventListener('click', exportJson);
+      els.exportCsvBtn.addEventListener('click', exportCsv);
+      els.importFile.addEventListener('change', importJson);
+      els.searchInput.addEventListener('input', e => {
+        filters.search = e.target.value.trim().toLowerCase();
+        render();
+      });
+      els.tagFilter.addEventListener('change', e => {
+        filters.tag = e.target.value;
+        render();
+      });
+      els.checkFilter.addEventListener('change', e => {
+        filters.check = e.target.value;
+        render();
+      });
+      els.sortBy.addEventListener('change', e => {
+        filters.sortBy = e.target.value;
+        render();
+      });
+      els.resetFiltersBtn.addEventListener('click', () => {
+        filters.search = '';
+        filters.tag = 'all';
+        filters.check = 'all';
+        filters.sortBy = 'created_desc';
+        els.searchInput.value = '';
+        els.tagFilter.value = 'all';
+        els.checkFilter.value = 'all';
+        els.sortBy.value = 'created_desc';
+        render();
+      });
+    }
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return structuredClone(defaultState);
+        const parsed = JSON.parse(raw);
+        return {
+          settings: {
+            checkLabels: Array.isArray(parsed?.settings?.checkLabels) && parsed.settings.checkLabels.length === 3
+              ? parsed.settings.checkLabels.map(v => String(v || '').trim() || 'MoP')
+              : [...defaultState.settings.checkLabels]
+          },
+          courses: Array.isArray(parsed?.courses) ? parsed.courses : []
+        };
+      } catch {
+        return structuredClone(defaultState);
+      }
+    }
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function hydrateSettings() {
+      const [a, b, c] = state.settings.checkLabels;
+      els.check1Label.value = a;
+      els.check2Label.value = b;
+      els.check3Label.value = c;
+    }
+
+    function saveCheckSettings() {
+      state.settings.checkLabels = [els.check1Label.value, els.check2Label.value, els.check3Label.value]
+        .map((v, i) => v.trim() || `MoP ${i + 1}`);
+      saveState();
+      render();
+    }
+
+    function addCourses() {
+      const lines = els.bulkCourses.value
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean);
+      const tag = els.bulkTag.value.trim() || 'Utan Avd';
+
+      if (!lines.length) {
+        alert('Lägg in minst en rad. Mirakel sker fortfarande inte av sig själva.');
+        return;
+      }
+
+      const now = Date.now();
+      const newCourses = lines.map((course, index) => ({
+        id: crypto.randomUUID ? crypto.randomUUID() : `${now}-${index}-${Math.random().toString(36).slice(2)}`,
+        course,
+        tag,
+        checks: [false, false, false],
+        createdAt: now + index
+      }));
+
+      state.courses.unshift(...newCourses);
+      saveState();
+      els.bulkCourses.value = '';
+      render();
+    }
+
+    function seedDemo() {
+      const samples = [
+        ['Nätverk och drift', 'IT', [true, false, true]],
+        ['Molnplattform', 'IT', [true, true, false]],
+        ['Informationsstyrning', 'HR', [false, true, false]],
+        ['Identitetshantering', 'Säkerhet', [true, true, true]],
+        ['Förvaltningsmodell', 'Ekonomi', [false, false, true]],
+        ['Digital arbetsplats', 'Kommunikation', [true, false, false]]
+      ];
+
+      const now = Date.now();
+      state.courses = samples.map((item, index) => ({
+        id: crypto.randomUUID ? crypto.randomUUID() : `${now}-${index}`,
+        course: item[0],
+        tag: item[1],
+        checks: item[2],
+        createdAt: now + index
+      }));
+      saveState();
+      render();
+    }
+
+    function clearAll() {
+      const confirmed = confirm('Detta raderar all sparad kursdata.');
+      if (!confirmed) return;
+      state = structuredClone(defaultState);
+      hydrateSettings();
+      saveState();
+      render();
+    }
+
+    function updateCourseCheck(courseId, checkIndex, value) {
+      const course = state.courses.find(c => c.id === courseId);
+      if (!course) return;
+      course.checks[checkIndex] = value;
+      saveState();
+      render();
+    }
+
+    function updateCourseTag(courseId, value) {
+      const course = state.courses.find(c => c.id === courseId);
+      if (!course) return;
+      course.tag = value.trim() || 'Utan Avd';
+      saveState();
+      render();
+    }
+
+    function deleteCourse(courseId) {
+      state.courses = state.courses.filter(c => c.id !== courseId);
+      saveState();
+      render();
+    }
+
+    function getFilteredCourses() {
+      let result = [...state.courses];
+
+      if (filters.search) {
+        result = result.filter(c =>
+          c.course.toLowerCase().includes(filters.search) ||
+          c.tag.toLowerCase().includes(filters.search)
+        );
+      }
+
+      if (filters.tag !== 'all') {
+        result = result.filter(c => c.tag === filters.tag);
+      }
+
+      if (filters.check !== 'all') {
+        if (filters.check === 'none') {
+          result = result.filter(c => !c.checks.some(Boolean));
+        } else if (filters.check === 'all_checked') {
+          result = result.filter(c => c.checks.every(Boolean));
+        } else if (filters.check.startsWith('check_')) {
+          const idx = Number(filters.check.split('_')[1]);
+          result = result.filter(c => c.checks[idx]);
+        }
+      }
+
+      result.sort((a, b) => {
+        switch (filters.sortBy) {
+          case 'created_asc': return a.createdAt - b.createdAt;
+          case 'course_asc': return a.course.localeCompare(b.course, 'sv');
+          case 'course_desc': return b.course.localeCompare(a.course, 'sv');
+          case 'tag_asc': return a.tag.localeCompare(b.tag, 'sv');
+          case 'checks_desc': return countChecks(b) - countChecks(a);
+          case 'checks_asc': return countChecks(a) - countChecks(b);
+          case 'created_desc':
+          default: return b.createdAt - a.createdAt;
+        }
+      });
+
+      return result;
+    }
+
+    function countChecks(course) {
+      return course.checks.filter(Boolean).length;
+    }
+
+    function render() {
+      renderFilters();
+      renderStats();
+      renderTable();
+      renderBars();
+      renderMopMatrix();
+    }
+
+    function renderFilters() {
+      const uniqueTags = [...new Set(state.courses.map(c => c.tag))].sort((a, b) => a.localeCompare(b, 'sv'));
+      const tagOptions = ['<option value="all">Alla Avd</option>']
+        .concat(uniqueTags.map(tag => `<option value="${escapeHtml(tag)}">${escapeHtml(tag)}</option>`));
+      els.tagFilter.innerHTML = tagOptions.join('');
+      els.tagFilter.value = uniqueTags.includes(filters.tag) ? filters.tag : 'all';
+      if (!uniqueTags.includes(filters.tag) && filters.tag !== 'all') filters.tag = 'all';
+
+      const checkOptions = [
+        `<option value="all">Alla statusar</option>`,
+        `<option value="none">Inga MoP</option>`,
+        `<option value="all_checked">Alla tre MoP</option>`,
+        ...state.settings.checkLabels.map((label, idx) => `<option value="check_${idx}">${escapeHtml(label)}</option>`)
+      ];
+      els.checkFilter.innerHTML = checkOptions.join('');
+      if (![...els.checkFilter.options].some(opt => opt.value === filters.check)) {
+        filters.check = 'all';
+      }
+      els.checkFilter.value = filters.check;
+    }
+
+    function renderStats() {
+      const filtered = getFilteredCourses();
+      const total = state.courses.length;
+      const shown = filtered.length;
+      const uniqueTags = new Set(filtered.map(c => c.tag)).size;
+      const withAnyCheck = filtered.filter(c => c.checks.some(Boolean)).length;
+
+      const items = [
+        ['Totalt antal poster', total],
+        ['Visas just nu', shown],
+        ['Antal Avd i urval', uniqueTags],
+        ['Med minst en MoP', withAnyCheck]
+      ];
+
+      els.statsGrid.innerHTML = items.map(([label, value]) => `
+        <div class="stat-card">
+          <div class="stat-label">${escapeHtml(String(label))}</div>
+          <div class="stat-value">${value}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderTable() {
+      const filtered = getFilteredCourses();
+      if (!filtered.length) {
+        els.courseTableBody.innerHTML = `<tr><td colspan="5"><div class="empty">Ingen post matchar filtret just nu.</div></td></tr>`;
+        return;
+      }
+
+      els.courseTableBody.innerHTML = filtered.map(course => {
+        const checksMarkup = state.settings.checkLabels.map((label, idx) => `
+          <label class="check-pill">
+            <input type="checkbox" ${course.checks[idx] ? 'checked' : ''} data-course-id="${course.id}" data-check-index="${idx}" />
+            <span>${escapeHtml(label)}</span>
+          </label>
+        `).join('');
+
+        return `
+          <tr>
+            <td>${escapeHtml(course.course)}</td>
+            <td>
+              <input type="text" value="${escapeHtml(course.tag)}" data-tag-id="${course.id}" />
+            </td>
+            <td><div class="check-group">${checksMarkup}</div></td>
+            <td><span class="badge">${countChecks(course)} / 3 MoP</span></td>
+            <td>
+              <div class="row-actions">
+                <button class="btn danger" data-delete-id="${course.id}">Ta bort</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      els.courseTableBody.querySelectorAll('input[type="checkbox"]').forEach(input => {
+        input.addEventListener('change', e => {
+          const courseId = e.target.dataset.courseId;
+          const index = Number(e.target.dataset.checkIndex);
+          updateCourseCheck(courseId, index, e.target.checked);
+        });
+      });
+
+      els.courseTableBody.querySelectorAll('input[data-tag-id]').forEach(input => {
+        input.addEventListener('change', e => {
+          updateCourseTag(e.target.dataset.tagId, e.target.value);
+        });
+      });
+
+      els.courseTableBody.querySelectorAll('button[data-delete-id]').forEach(btn => {
+        btn.addEventListener('click', e => deleteCourse(e.target.dataset.deleteId));
+      });
+    }
+
+    function renderBars() {
+      const filtered = getFilteredCourses();
+      const tagCounts = {};
+      filtered.forEach(c => { tagCounts[c.tag] = (tagCounts[c.tag] || 0) + 1; });
+      const tagEntries = Object.entries(tagCounts).sort((a,b) => b[1] - a[1]);
+
+      els.tagStats.innerHTML = tagEntries.length
+        ? createBars(tagEntries)
+        : '<div class="small">Ingen statistik att visa ännu.</div>';
+
+      const checkEntries = state.settings.checkLabels.map((label, idx) => [
+        label,
+        filtered.filter(c => c.checks[idx]).length
+      ]);
+      els.checkStats.innerHTML = filtered.length
+        ? createBars(checkEntries)
+        : '<div class="small">Ingen statistik att visa ännu.</div>';
+    }
+
+    function createBars(entries) {
+      const max = Math.max(...entries.map(([,count]) => count), 1);
+      return entries.map(([label, count]) => {
+        const pct = (count / max) * 100;
+        return `
+          <div class="bar-item">
+            <div style="display:flex;justify-content:space-between;gap:8px;">
+              <span>${escapeHtml(String(label))}</span>
+              <strong>${count}</strong>
+            </div>
+            <div class="bar-line"><div class="bar-fill" style="width:${pct}%;"></div></div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderMopMatrix() {
+      const filtered = getFilteredCourses();
+      const avdList = [...new Set(filtered.map(c => c.tag))].sort((a, b) => a.localeCompare(b, 'sv'));
+      const labels = state.settings.checkLabels;
+
+      els.mopMatrixHead.innerHTML = ['<th style="width:28%;">Avd</th>']
+        .concat(labels.map(label => `<th>${escapeHtml(label)}</th>`))
+        .concat(['<th>Totalt</th>'])
+        .join('');
+
+      if (!avdList.length) {
+        els.mopMatrixBody.innerHTML = `<tr><td colspan="${labels.length + 2}"><div class="empty">Ingen statistik att visa ännu.</div></td></tr>`;
+        return;
+      }
+
+      const rows = avdList.map(avd => {
+        const subset = filtered.filter(c => c.tag === avd);
+        const mopCounts = labels.map((_, idx) => subset.filter(c => c.checks[idx]).length);
+        return `
+          <tr>
+            <td><strong>${escapeHtml(avd)}</strong></td>
+            ${mopCounts.map(count => `<td><span class="badge">${count}</span></td>`).join('')}
+            <td><span class="badge">${subset.length}</span></td>
+          </tr>
+        `;
+      });
+
+      els.mopMatrixBody.innerHTML = rows.join('');
+    }
+
+    function exportJson() {
+      downloadFile(JSON.stringify(state, null, 2), 'uppfoljning-digital-infrastruktur.json', 'application/json');
+    }
+
+    function exportCsv() {
+      const rows = [
+        ['Kurs', 'Avd', state.settings.checkLabels[0], state.settings.checkLabels[1], state.settings.checkLabels[2], 'Antal bockar']
+      ];
+      state.courses.forEach(c => {
+        rows.push([
+          c.course,
+          c.tag,
+          c.checks[0] ? 'Ja' : 'Nej',
+          c.checks[1] ? 'Ja' : 'Nej',
+          c.checks[2] ? 'Ja' : 'Nej',
+          String(countChecks(c))
+        ]);
+      });
+      const csv = rows.map(row => row.map(csvEscape).join(';')).join('\n');
+      downloadFile(csv, 'uppfoljning-digital-infrastruktur.csv', 'text/csv;charset=utf-8');
+    }
+
+    function importJson(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const parsed = JSON.parse(reader.result);
+          if (!parsed || !Array.isArray(parsed.courses) || !parsed.settings) {
+            throw new Error('Ogiltig fil');
+          }
+          state = {
+            settings: {
+              checkLabels: Array.isArray(parsed.settings.checkLabels) && parsed.settings.checkLabels.length === 3
+                ? parsed.settings.checkLabels.map((v, i) => String(v || '').trim() || `MoP ${i + 1}`)
+                : [...defaultState.settings.checkLabels]
+            },
+            courses: parsed.courses.map((c, index) => ({
+              id: String(c.id || (crypto.randomUUID ? crypto.randomUUID() : `import-${Date.now()}-${index}`)),
+              course: String(c.course || ''),
+              tag: String(c.tag || 'Utan Avd'),
+              checks: Array.isArray(c.checks) && c.checks.length === 3 ? c.checks.map(Boolean) : [false, false, false],
+              createdAt: Number(c.createdAt || Date.now() + index)
+            }))
+          };
+          saveState();
+          hydrateSettings();
+          render();
+          alert('Data importerad. Någonstans vann ordningen precis över kaoset.');
+        } catch {
+          alert('Det gick inte att läsa filen. Kontrollera att det är en export från appen.');
+        } finally {
+          event.target.value = '';
+        }
+      };
+      reader.readAsText(file, 'utf-8');
+    }
+
+    function downloadFile(content, filename, type) {
+      const blob = new Blob([content], { type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function csvEscape(value) {
+      const str = String(value ?? '');
+      if (/[";\n]/.test(str)) return '"' + str.replaceAll('"', '""') + '"';
+      return str;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+  </script>
+</body>
+</html>
